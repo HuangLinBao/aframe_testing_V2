@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>C_Center test ||</title>
+
+        <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+        <script>
+            delete AFRAME.components["grabbable"];
+        </script>
+        <script src="https://cdn.jsdelivr.net/npm/handy-work/build/handy-controls.min.js"></script>
+        <script
+            src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
+
+        <script src="https://unpkg.com/aframe-troika-text/dist/aframe-troika-text.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.5.4/dist/aframe-extras.min.js"></script>
+        <script src="https://unpkg.com/super-hands@^3.0.5/dist/super-hands.min.js"></script>
+        <script
+            src="https://unpkg.com/aframe-event-set-component@5.0.0/dist/aframe-event-set-component.min.js"></script>
+        <script
+            src="https://unpkg.com/aframe-render-order-component@1.1.0/dist/aframe-render-order-component.min.js"></script>
+        <script src="https://unpkg.com/aframe-log-component/dist/aframe-log-component.min.js"></script>
+        <script src="components/fx.js"></script>
+        <script>
+            AFRAME.registerComponent('show-hand-pose', {
+                init: function () {
+                    var handyControlsEl = document.querySelector('#handController');
+                    var poseDisplayEl = document.querySelector('#handPoseDisplay');
+                    if (!handyControlsEl || !poseDisplayEl) return;
+                    handyControlsEl.addEventListener('pose', function (event) {
+                        console.log('Pose event received', event.detail);
+                        const pose = (event.detail && event.detail.pose) ? event.detail.pose : 'Unknown';
+                        poseDisplayEl.setAttribute('troika-text', 'value', 'Pose: ' + pose);
+                    });
+                }
+            });
+        </script>
+
+    </head>
+
+    <body>
+        <a-scene gltf-model environment="ground: flat; groundTexture: none; lighting: none; shadow: false; fog: 0.1"
+            renderer="antialias: true; colorManagement: true; sortObjects: true; highRefreshRate: true; foveationLevel: 3"
+            loading-screen="enabled: false" vr-mode-ui="enterVRButton: #enter-vr-button"
+            webxr="optionalFeatures: hand-tracking,local-floor"
+            render-order="background, environment, furniture, videos, displays, foreground, ui" show-hand-pose>
+
+            <a-assets timeout="10000">
+
+                <!-- Models -->
+                <a-asset-item id="scifi_desk" src="assets/models/scifi_desk/scene.gltf" preload="true"></a-asset-item>
+                <a-asset-item id="scifi_desk_2" src="assets/models/scifi_desk_glb/scene.glb"
+                    preload="true"></a-asset-item>
+                <a-asset-item id="ceiling_lamp" src="assets/models/ceiling_lamp/scene.gltf"
+                    preload="true"></a-asset-item>
+                <!-- Textures -->
+                <!-- Floor -->
+                <img id="floor" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_albedo.webp">
+                <img id="floor-nrm" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_normal.webp">
+                <img id="floor-ao" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_ao.webp">
+                <img id="floor-height" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_height.webp">
+                <img id="floor-roughness"
+                    src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_roughness.webp">
+                <img id="floor-metallic" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_metallic.webp">
+                <img id="floor-emissive" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_emissive.webp">
+                <!-- Walls -->
+                <img id="wall" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_albedo.webp">
+                <img id="wall-nrm" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_normal.webp">
+                <img id="wall-ao" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_ao.webp">
+                <img id="wall-height" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_height.webp">
+                <img id="wall-roughness"
+                    src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_roughness.webp">
+                <img id="wall-metallic" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_metallic.webp">
+                <img id="wall-emissive" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_emissive.webp">
+                <!-- Patterns -->
+                <img id="pattern" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_albedo.webp">
+                <img id="pattern-nrm" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_normal.webp">
+                <img id="pattern-ao" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_ao.webp">
+                <img id="pattern-height" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_height.webp">
+                <img id="pattern-roughness"
+                    src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_roughness.webp">
+                <img id="pattern-metallic" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_metallic.webp">
+                <img id="pattern-emissive" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_emissive.webp">
+
+                <img id="pattern-2" src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_albedo.webp">
+                <img id="pattern-2-nrm"
+                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_normal.webp">
+                <img id="pattern-2-ao" src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_ao.webp">
+                <img id="pattern-2-height"
+                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_height.webp">
+                <img id="pattern-2-roughness"
+                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_roughness.webp">
+                <img id="pattern-2-metallic"
+                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_metallic.webp">
+                <!-- Panels -->
+                <img id="panel" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_albedo.webp">
+                <img id="panel-nrm" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_normal.webp">
+                <img id="panel-ao" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_ao.webp">
+                <img id="panel-height" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_height.webp">
+                <img id="panel-roughness"
+                    src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_roughness.webp">
+                <img id="panel-metallic"
+                    src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_metallic.webp">
+
+                <!-- Fonts -->
+                <a-asset-item id="pixel-ar" src="assets/Fonts/29LT_Arapix/29LTArapix-Regular.otf"></a-asset-item>
+
+                <!-- Templates for super-hands -->
+                <template id="button-template">
+                    <a-entity>
+                        <a-box class="clickable" width="0.2" height="0.08" depth="0.01"></a-box>
+                    </a-entity>
+                </template>
+            </a-assets>
+
+
+
+            <!-- Walls -->
+            <!-- Front Wall -->
+            <a-entity geometry="primitive: box; width: 30; height: 12; depth: 0.2" position="0 6 -15" material="src: #wall;
+            repeat: 6 3;
+            normalMap: #wall-nrm;
+            normalTextureRepeat: 6 3;
+            ambientOcclusionMap: #wall-ao;
+            ambientOcclusionTextureRepeat: 6 3;
+            displacementMap: #wall-height;
+            displacementTextureRepeat: 6 3;
+            displacementBias: 0;
+            roughnessMap: #wall-roughness;
+            roughnessTextureRepeat: 6 3;
+            roughness: 0.6;
+            metalnessMap: #wall-metallic;
+            metalnessTextureRepeat: 6 3;
+            metalness: 0.1;
+            emissive: #FFFFFF;
+            side: double" custom-emissive-map="src: #wall-emissive"></a-entity>
+
+            <!-- Left Wall -->
+            <a-entity geometry="primitive: box; width: 0.2; height: 12; depth: 30" position="-15 6 0" material="src: #wall;
+                repeat: 6 3;
+                normalMap: #wall-nrm;
+                normalTextureRepeat: 6 3;
+                ambientOcclusionMap: #wall-ao;
+                ambientOcclusionTextureRepeat: 6 3;
+                displacementMap: #wall-height;
+                displacementTextureRepeat: 6 3;
+                displacementBias: 0;
+                roughnessMap: #wall-roughness;
+                roughnessTextureRepeat: 6 3;
+                roughness: 0.6;
+                metalnessMap: #wall-metallic;
+                metalnessTextureRepeat: 6 3;
+                metalness: 0.1;
+                emissive: #FFFFFF;
+                side: double" custom-emissive-map="src: #wall-emissive">
+            </a-entity>
+
+            <!-- Back Wall -->
+            <a-entity geometry="primitive: box; width: 30; height: 12; depth: 0.2" position="0 6 15" material="src: #wall;
+            repeat: 6 3;
+            normalMap: #wall-nrm;
+            normalTextureRepeat: 6 3;
+            ambientOcclusionMap: #wall-ao;
+            ambientOcclusionTextureRepeat: 6 3;
+            displacementMap: #wall-height;
+            displacementTextureRepeat: 6 3;
+            displacementBias: 0;
+            roughnessMap: #wall-roughness;
+            roughnessTextureRepeat: 6 3;
+            roughness: 0.6;
+            metalnessMap: #wall-metallic;
+            metalnessTextureRepeat: 6 3;
+            metalness: 0.1;
+            emissive: #FFFFFF;
+            side: double" custom-emissive-map="src: #wall-emissive"></a-entity>
+
+            <!-- Right Wall -->
+            <a-entity geometry="primitive: box; width: 0.2; height: 12; depth: 30" position="15 6 0" material="src: #wall;
+                repeat: 6 3;
+                normalMap: #wall-nrm;
+                normalTextureRepeat: 6 3;
+                ambientOcclusionMap: #wall-ao;
+                ambientOcclusionTextureRepeat: 6 3;
+                displacementMap: #wall-height;
+                displacementTextureRepeat: 6 3;
+                displacementBias: 0;
+                roughnessMap: #wall-roughness;
+                roughnessTextureRepeat: 6 3;
+                roughness: 0.6;
+                metalnessMap: #wall-metallic;
+                metalnessTextureRepeat: 6 3;
+                metalness: 0.1;
+                emissive: #FFFFFF;
+                side: double" custom-emissive-map="src: #wall-emissive"></a-entity>
+
+            <!-- Floor -->
+            <a-plane material="src: #floor;
+                repeat: 6 6;
+                normalMap: #floor-nrm;
+                normalTextureRepeat: 6 6;
+                ambientOcclusionMap: #floor-ao;
+                ambientOcclusionTextureRepeat: 6 6;
+                displacementMap: #floor-height;
+                displacementTextureRepeat: 8 8;
+                displacementBias: -0.430;
+                roughnessMap: #floor-roughness;
+                roughnessTextureRepeat: 6 6;
+                roughness: 0.6;
+                metalnessMap: #floor-metallic;
+                metalness: 0.26;
+                metalnessTextureRepeat: 6 6;
+                emissive: #FFFFFF;
+                side: double" width="10" height="10" position="0 0.02 0" scale="3 3 1" rotation="-90 0 0"
+                custom-emissive-map="src: #floor-emissive">
+            </a-plane>
+
+            <!-- Ceiling -->
+            <a-plane material="src: #wall;
+            repeat: 6 6;
+            normalMap: #wall-nrm;
+            normalTextureRepeat: 6 6;
+            ambientOcclusionMap: #wall-ao;
+            ambientOcclusionTextureRepeat: 6 6;
+            displacementMap: #wall-height;
+            displacementTextureRepeat: 6 6;
+            displacementBias: 0;
+            roughnessMap: #wall-roughness;
+            roughnessTextureRepeat: 6 6;
+            roughness: 0.6;
+            metalnessMap: #wall-metallic;
+            metalnessTextureRepeat: 6 6;
+            metalness: 0.100;
+            emissive: #FFFFFF;
+            side: double" width="10" height="10" position="0 12 0" rotation="90 0 0" scale="3 3 1"
+                custom-emissive-map="src: #wall-emissive">
+            </a-plane>
+
+            <!-- Ceiling Lamp -->
+            <a-entity id="ceiling_lamp" gltf-model="#ceiling_lamp" position="0 12 7.5" rotation="0 0 0" scale="1 0.23 1"
+                visible="true" lod="minLevel: 0; maxLevel: 2">
+                <!-- Main ambient light -->
+                <a-light type="ambient" color="#5db7ee" intensity="0.90"></a-light>
+            </a-entity>
+
+
+            <a-entity id="ceiling_lamp_2" gltf-model="#ceiling_lamp" position="0 12 -7.5" rotation="0 0 0"
+                scale="1 0.23 1">
+                <!-- Ambient light for base illumination -->
+                <a-light type="ambient" color="#FFFFFF" intensity="0.090"></a-light>
+
+            </a-entity>
+
+
+
+            <!-- Environment -->
+            <!-- Desk -->
+
+            <a-entity id="scifi_desk_2" gltf-model="#scifi_desk_2" rotation="0 90 0" scale="1.5 1 2"
+                position="0 0.04 -0.5" visible="false"></a-entity>
+
+            <!-- Main Pose Display -->
+            <a-entity id="handPoseDisplay" geometry="primitive: plane; width: 1.2; height: 0.6"
+                material="color: #000022; opacity: 0.9; transparent: true" position="0 1.8 -2.5" troika-text="value: Initializing...; 
+                           color: #00ff88; 
+                           fontSize: 0.06; 
+                           align: center; 
+                           baseline: center;
+                           maxWidth: 1.1;">
+            </a-entity>
+
+
+            <!-- <a-entity log geometry="primitive: plane" material="color: #111" text="color: lightgreen"
+                position="-1 1.5 -1"></a-entity> -->
+
+            <a-entity id="player" position="0 0.5 0" movement-controls="acceleration: 50; easing: 40"
+                wasd-controls="acceleration: 50; easing: 40">
+
+                <!-- Camera -->
+                <a-entity camera look-controls>
+                </a-entity>
+
+                <!-- Hand Controls (manages both hands) -->
+                <a-entity id="handController" handy-controls>
+                </a-entity>
+            </a-entity>
+
+        </a-scene>
+    </body>
+
+</html>
