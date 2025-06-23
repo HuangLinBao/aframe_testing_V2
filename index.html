@@ -5,12 +5,14 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>C_Center test ||</title>
+        <link rel="stylesheet" href="style.css">
 
         <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
         <script>
             delete AFRAME.components["grabbable"];
         </script>
         <script src="https://cdn.jsdelivr.net/npm/handy-work/build/handy-controls.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/handy-work/build/magnet-helpers.min.js"></script>
         <script
             src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
 
@@ -19,21 +21,315 @@
         <script src="https://unpkg.com/super-hands@^3.0.5/dist/super-hands.min.js"></script>
         <script
             src="https://unpkg.com/aframe-event-set-component@5.0.0/dist/aframe-event-set-component.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/aframe-blink-controls/dist/aframe-blink-controls.min.js"></script>
         <script
             src="https://unpkg.com/aframe-render-order-component@1.1.0/dist/aframe-render-order-component.min.js"></script>
         <script src="https://unpkg.com/aframe-log-component/dist/aframe-log-component.min.js"></script>
+
+        <script src="https://unpkg.com/aframe-look-at-component@^1.0.0/dist/aframe-look-at-component.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/aframe-htmlmesh@2.4.0/build/aframe-html.min.js"></script>
         <script src="components/fx.js"></script>
+        <script src="shaders/aurora-shader.js"></script>
         <script>
+            window.addEventListener("DOMContentLoaded", function () {
+                const sceneEl = document.querySelector("a-scene");
+
+                const labels = Array.from(document.querySelectorAll('.pose-label'));
+                for (const el of labels) {
+                    el.parentNode.addEventListener('pose', function (event) {
+                        el.setAttribute('text', 'value', event.detail.pose);
+                    });
+                    el.parentNode.addEventListener('gamepad', function (event) {
+                        el.setAttribute('text', 'value', event.detail.event);
+                    });
+                }
+
+            });
+
+
+
+
+            // Hand tracking quality monitor
+            AFRAME.registerComponent('hand-quality-monitor', {
+                init: function () {
+                    this.leftHandVisible = false;
+                    this.rightHandVisible = false;
+                    this.leftHandQuality = 'unknown';
+                    this.rightHandQuality = 'unknown';
+
+                    console.log('👁️ Hand quality monitor initialized');
+                    // addDebugMessage will be available after show-hand-pose component initializes
+                },
+
+                tick: function () {
+                    var scene = document.querySelector('a-scene');
+                    if (!scene.is('vr-mode') || !scene.renderer.xr.isPresenting) return;
+
+                    var session = scene.renderer.xr.getSession();
+                    var frame = scene.frame;
+                    var referenceSpace = scene.renderer.xr.getReferenceSpace();
+
+                    if (!session || !frame || !referenceSpace) return;
+
+                    for (var inputSource of session.inputSources) {
+                        if (inputSource.hand) {
+                            var handedness = inputSource.handedness;
+                            var wrist = frame.getJointPose(inputSource.hand.get("wrist"), referenceSpace);
+
+                            if (wrist) {
+                                // Check hand distance from headset (approximate)
+                                var distance = Math.sqrt(
+                                    wrist.transform.position.x * wrist.transform.position.x +
+                                    wrist.transform.position.y * wrist.transform.position.y +
+                                    wrist.transform.position.z * wrist.transform.position.z
+                                );
+
+                                var quality = 'Good';
+                                if (distance < 0.25) quality = 'Too Close';
+                                else if (distance > 0.8) quality = 'Too Far';
+                                else if (wrist.transform.position.x > 0.4 || wrist.transform.position.x < -0.4) quality = 'Off Center';
+
+                                if (handedness === 'left') {
+                                    var prevQuality = this.leftHandQuality;
+                                    this.leftHandVisible = true;
+                                    this.leftHandQuality = quality;
+
+                                    // Log quality changes to VR display
+                                    if (prevQuality !== quality && quality !== 'Good' && window.addDebugMessage) {
+                                        window.addDebugMessage('LEFT hand: ' + quality + ' (dist: ' + distance.toFixed(2) + 'm)', 'warn');
+                                    }
+                                } else {
+                                    var prevQuality = this.rightHandQuality;
+                                    this.rightHandVisible = true;
+                                    this.rightHandQuality = quality;
+
+                                    // Log quality changes to VR display
+                                    if (prevQuality !== quality && quality !== 'Good' && window.addDebugMessage) {
+                                        window.addDebugMessage('RIGHT hand: ' + quality + ' (dist: ' + distance.toFixed(2) + 'm)', 'warn');
+                                    }
+                                }
+                            } else {
+                                if (handedness === 'left') this.leftHandVisible = false;
+                                else this.rightHandVisible = false;
+                            }
+                        }
+                    }
+                }
+            });
+
             AFRAME.registerComponent('show-hand-pose', {
                 init: function () {
-                    var handyControlsEl = document.querySelector('#handController');
+                    var rightRay = document.querySelector('#rightRay');
+                    var leftRay = document.querySelector('#leftRay');
                     var poseDisplayEl = document.querySelector('#handPoseDisplay');
-                    if (!handyControlsEl || !poseDisplayEl) return;
-                    handyControlsEl.addEventListener('pose', function (event) {
-                        console.log('Pose event received', event.detail);
-                        const pose = (event.detail && event.detail.pose) ? event.detail.pose : 'Unknown';
-                        poseDisplayEl.setAttribute('troika-text', 'value', 'Pose: ' + pose);
+                    var leftPoseDisplayEl = document.querySelector('#leftHandPoseDisplay');
+                    var rightPoseDisplayEl = document.querySelector('#rightHandPoseDisplay');
+
+                    var leftPose = 'none';
+                    var rightPose = 'none';
+                    var debugLog = [];
+                    var maxLogEntries = 8;
+
+                    // Function to add debug messages to VR displays
+                    function addDebugMessage(message, type = 'info') {
+                        var timestamp = new Date().toLocaleTimeString();
+                        var emoji = type === 'warn' ? '⚠️' : type === 'error' ? '❌' : 'ℹ️';
+                        var logEntry = '[' + timestamp + '] ' + emoji + ' ' + message;
+
+                        debugLog.unshift(logEntry);
+                        if (debugLog.length > maxLogEntries) {
+                            debugLog.pop();
+                        }
+                        updateDebugDisplays();
+                    }
+
+                    // Make addDebugMessage globally available
+                    window.addDebugMessage = addDebugMessage;
+
+                    function updateDebugDisplays() {
+                        var leftLogEl = document.querySelector('#leftDebugLog');
+                        var rightLogEl = document.querySelector('#rightDebugLog');
+                        var mainLogEl = document.querySelector('#mainDebugLog');
+
+                        if (leftLogEl && rightLogEl && mainLogEl) {
+                            var logText = debugLog.join('\n');
+
+                            leftLogEl.setAttribute('troika-text', 'value',
+                                '📝 LEFT HAND DEBUG LOG:\n\n' + logText);
+                            rightLogEl.setAttribute('troika-text', 'value',
+                                '📝 RIGHT HAND DEBUG LOG:\n\n' + logText);
+                            mainLogEl.setAttribute('troika-text', 'value',
+                                '📊 LIVE DEBUG CONSOLE:\n\n' + logText);
+                        }
+                    }
+
+                    var poseDescriptions = {
+                        fist: '✊ Fist',
+                        flat: '✋ Open Palm',
+                        point: '👉 Pointing',
+                        horns: '🤘 Rock On',
+                        shaka: '🤙 Hang Loose',
+                        vulcan: '🖖 Live Long & Prosper',
+                        relax: '👋 Relaxed',
+                        none: '❓ No pose',
+                        unknown: '❓ Unknown'
+                    };
+
+                    function updateLeftPose(event) {
+                        leftPose = (event.detail && event.detail.pose) ? event.detail.pose : 'unknown';
+                        var description = poseDescriptions[leftPose] || leftPose;
+                        var timestamp = new Date().toLocaleTimeString();
+                        var confidence = event.detail && event.detail.confidence ? event.detail.confidence.toFixed(3) : 'N/A';
+
+                        // Update left panel with more debug info
+                        leftPoseDisplayEl.setAttribute('troika-text', 'value',
+                            '👈 Left Hand [' + timestamp + ']\n\n' + description +
+                            '\nConfidence: ' + confidence);
+
+                        // Update main panel with both poses
+                        updateMainDisplay();
+
+                        console.log('🎯 LEFT HAND POSE:', leftPose, 'Confidence:', confidence);
+                        addDebugMessage('LEFT: ' + leftPose + ' (conf: ' + confidence + ')');
+
+                        // Special debugging for common false positives
+                        if (leftPose === 'vulcan' && confidence !== 'N/A' && parseFloat(confidence) < 0.8) {
+                            var warnMsg = 'LOW CONFIDENCE VULCAN - might be false positive. Try fully relaxing all fingers.';
+                            console.warn('⚠️ ' + warnMsg);
+                            addDebugMessage('LEFT: ' + warnMsg, 'warn');
+                        }
+                        if (leftPose === 'flat' && confidence !== 'N/A' && parseFloat(confidence) < 0.7) {
+                            var warnMsg = 'LOW CONFIDENCE FLAT - try spreading fingers more clearly and evenly.';
+                            console.warn('⚠️ ' + warnMsg);
+                            addDebugMessage('LEFT: ' + warnMsg, 'warn');
+                        }
+                    }
+
+                    function updateRightPose(event) {
+                        rightPose = (event.detail && event.detail.pose) ? event.detail.pose : 'unknown';
+                        var description = poseDescriptions[rightPose] || rightPose;
+                        var timestamp = new Date().toLocaleTimeString();
+                        var confidence = event.detail && event.detail.confidence ? event.detail.confidence.toFixed(3) : 'N/A';
+
+                        // Update right panel with more debug info
+                        rightPoseDisplayEl.setAttribute('troika-text', 'value',
+                            '👉 Right Hand [' + timestamp + ']\n\n' + description +
+                            '\nConfidence: ' + confidence);
+
+                        // Update main panel with both poses
+                        updateMainDisplay();
+
+                        console.log('🎯 RIGHT HAND POSE:', rightPose, 'Confidence:', confidence);
+                        addDebugMessage('RIGHT: ' + rightPose + ' (conf: ' + confidence + ')');
+
+                        // Special debugging for common false positives
+                        if (rightPose === 'vulcan' && confidence !== 'N/A' && parseFloat(confidence) < 0.8) {
+                            var warnMsg = 'LOW CONFIDENCE VULCAN - might be false positive. Try fully relaxing all fingers.';
+                            console.warn('⚠️ ' + warnMsg);
+                            addDebugMessage('RIGHT: ' + warnMsg, 'warn');
+                        }
+                        if (rightPose === 'flat' && confidence !== 'N/A' && parseFloat(confidence) < 0.7) {
+                            var warnMsg = 'LOW CONFIDENCE FLAT - try spreading fingers more clearly and evenly.';
+                            console.warn('⚠️ ' + warnMsg);
+                            addDebugMessage('RIGHT: ' + warnMsg, 'warn');
+                        }
+                    }
+
+
+
+                    function updateMainDisplay() {
+                        var leftDesc = poseDescriptions[leftPose] || leftPose;
+                        var rightDesc = poseDescriptions[rightPose] || rightPose;
+                        var timestamp = new Date().toLocaleTimeString();
+                        var qualityMonitor = document.querySelector('a-scene').components['hand-quality-monitor'];
+
+                        var message = '🙌 Hand Tracking Debug [' + timestamp + ']\n\n';
+                        message += '👈 Left: ' + leftDesc + '\n';
+                        message += '👉 Right: ' + rightDesc;
+
+                        // Add hand tracking quality info
+                        message += '\n\n--- Tracking Quality ---';
+                        if (qualityMonitor) {
+                            message += '\n👈 LEFT: ' + (qualityMonitor.leftHandVisible ? qualityMonitor.leftHandQuality : 'Not Visible');
+                            message += '\n👉 RIGHT: ' + (qualityMonitor.rightHandVisible ? qualityMonitor.rightHandQuality : 'Not Visible');
+                        }
+
+                        poseDisplayEl.setAttribute('troika-text', 'value', message);
+                    }
+
+                    // Set up event listeners
+                    if (rightRay) {
+                        rightRay.addEventListener('pose', updateRightPose);
+                        console.log('✅ Right hand pose listener added');
+                    } else {
+                        console.log('❌ Right ray not found');
+                    }
+
+                    if (leftRay) {
+                        leftRay.addEventListener('pose', updateLeftPose);
+                        console.log('✅ Left hand pose listener added');
+                    } else {
+                        console.log('❌ Left ray not found');
+                    }
+
+                    console.log('🎯 Hand pose tracking initialized for both hands');
+                    addDebugMessage('Hand pose tracking initialized');
+
+                    // Set up VR mode detection
+                    this.el.sceneEl.addEventListener('enter-vr', function () {
+                        console.log('🎯 VR mode started');
+                        addDebugMessage('VR mode started');
                     });
+                }
+            });
+
+
+
+            // Debug component for ray intersection
+            AFRAME.registerComponent('ray-debug', {
+                init: function () {
+                    // Listen for raycaster intersection events on this ray
+                    this.el.addEventListener('raycaster-intersection', (event) => {
+                        console.log('🎯 Ray intersection detected:', event.detail);
+                        if (window.addDebugMessage) {
+                            window.addDebugMessage('🎯 Ray intersection detected');
+                        }
+                    });
+
+                    this.el.addEventListener('raycaster-intersection-cleared', (event) => {
+                        console.log('🎯 Ray intersection cleared:', event.detail);
+                    });
+
+                    // Monitor raycaster component directly
+                    this.raycaster = this.el.components.raycaster;
+                    if (this.raycaster) {
+                        console.log('✅ Ray debug component found raycaster on:', this.el.id);
+                        if (window.addDebugMessage) {
+                            window.addDebugMessage('✅ Ray debug found raycaster on ' + this.el.id);
+                        }
+                    } else {
+                        console.log('❌ Ray debug component could not find raycaster on:', this.el.id);
+                        if (window.addDebugMessage) {
+                            window.addDebugMessage('❌ No raycaster found on ' + this.el.id, 'warn');
+                        }
+                    }
+                },
+
+                tick: function () {
+                    if (this.raycaster && this.raycaster.intersectedEls && this.raycaster.intersectedEls.length > 0) {
+                        // Only log once per intersection to avoid spam
+                        if (!this.lastIntersection || this.lastIntersection !== this.raycaster.intersectedEls[0].id) {
+                            this.lastIntersection = this.raycaster.intersectedEls[0].id;
+                            console.log('🔍 ' + this.el.id + ' intersecting:', this.lastIntersection);
+                            if (window.addDebugMessage) {
+                                window.addDebugMessage('🔍 ' + this.el.id + ' → ' + this.lastIntersection);
+                            }
+                        }
+                    } else {
+                        if (this.lastIntersection) {
+                            this.lastIntersection = null;
+                        }
+                    }
                 }
             });
         </script>
@@ -41,68 +337,33 @@
     </head>
 
     <body>
-        <a-scene gltf-model environment="ground: flat; groundTexture: none; lighting: none; shadow: false; fog: 0.1"
-            renderer="antialias: true; colorManagement: true; sortObjects: true; highRefreshRate: true; foveationLevel: 3"
-            loading-screen="enabled: false" vr-mode-ui="enterVRButton: #enter-vr-button"
-            webxr="optionalFeatures: hand-tracking,local-floor"
-            render-order="background, environment, furniture, videos, displays, foreground, ui" show-hand-pose>
+        <a-scene
+            environment=" preset:default;ground: flat; groundTexture: none; lighting: distant; shadow: false; fog: 0.1"
+            renderer="antialias: true" loading-screen="enabled: false" vr-mode-ui="enterVRButton: #enter-vr-button"
+            webxr="optionalFeatures: hand-tracking,local-floor; overlayElement:#dom-overlay;" show-hand-pose
+            hand-quality-monitor ar-cursor>
 
             <a-assets timeout="10000">
 
                 <!-- Models -->
-                <a-asset-item id="scifi_desk" src="assets/models/scifi_desk/scene.gltf" preload="true"></a-asset-item>
-                <a-asset-item id="scifi_desk_2" src="assets/models/scifi_desk_glb/scene.glb"
+                <a-asset-item id="sword" src="assets/models/sword/scene.gltf" preload="true"></a-asset-item>
+                <a-asset-item id="chaos_orb" src="assets/models/chaos_orb/scene.gltf" preload="true"></a-asset-item>
+                <a-asset-item id="magical_orb" src="assets/models/magical_orb/scene.gltf" preload="true"></a-asset-item>
+                <a-asset-item id="time_chamber" src="assets/models/time_chamber/scene.gltf"
                     preload="true"></a-asset-item>
-                <a-asset-item id="ceiling_lamp" src="assets/models/ceiling_lamp/scene.gltf"
-                    preload="true"></a-asset-item>
+                <a-asset-item id="watch" src="assets/models/watch/scene.glb" preload="true"></a-asset-item>
+
                 <!-- Textures -->
                 <!-- Floor -->
-                <img id="floor" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_albedo.webp">
-                <img id="floor-nrm" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_normal.webp">
-                <img id="floor-ao" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_ao.webp">
-                <img id="floor-height" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_height.webp">
-                <img id="floor-roughness"
-                    src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_roughness.webp">
-                <img id="floor-metallic" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_metallic.webp">
-                <img id="floor-emissive" src="assets/img/textures/floor_scifi_webp/TCom_Scifi_Floor3_1K_emissive.webp">
-                <!-- Walls -->
-                <img id="wall" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_albedo.webp">
-                <img id="wall-nrm" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_normal.webp">
-                <img id="wall-ao" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_ao.webp">
-                <img id="wall-height" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_height.webp">
-                <img id="wall-roughness"
-                    src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_roughness.webp">
-                <img id="wall-metallic" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_metallic.webp">
-                <img id="wall-emissive" src="assets/img/textures/panel_scifi_webp/TCom_SciFiPanels09_1K_emissive.webp">
-                <!-- Patterns -->
-                <img id="pattern" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_albedo.webp">
-                <img id="pattern-nrm" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_normal.webp">
-                <img id="pattern-ao" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_ao.webp">
-                <img id="pattern-height" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_height.webp">
-                <img id="pattern-roughness"
-                    src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_roughness.webp">
-                <img id="pattern-metallic" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_metallic.webp">
-                <img id="pattern-emissive" src="assets/img/textures/pattern_scifi_webp/Scifi_Pattern2_1K_emissive.webp">
 
-                <img id="pattern-2" src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_albedo.webp">
-                <img id="pattern-2-nrm"
-                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_normal.webp">
-                <img id="pattern-2-ao" src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_ao.webp">
-                <img id="pattern-2-height"
-                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_height.webp">
-                <img id="pattern-2-roughness"
-                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_roughness.webp">
-                <img id="pattern-2-metallic"
-                    src="assets/img/textures/pattern_scifi_2_webp/TCom_Scifi_Pattern_1K_metallic.webp">
-                <!-- Panels -->
-                <img id="panel" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_albedo.webp">
-                <img id="panel-nrm" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_normal.webp">
-                <img id="panel-ao" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_ao.webp">
-                <img id="panel-height" src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_height.webp">
-                <img id="panel-roughness"
-                    src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_roughness.webp">
-                <img id="panel-metallic"
-                    src="assets/img/textures/panel_scifi_2_webp/TCom_SciFiPanels06_1K_metallic.webp">
+                <img id="floor_glass" src="assets/img/textures/Glass_webp/TCom_GlassFrostedLines_1K_albedo.webp">
+                <img id="floor_glass_nrm" src="assets/img/textures/Glass_webp/TCom_GlassFrostedLines_1K_normal.webp">
+                <img id="floor_glass_ao" src="assets/img/textures/Glass_webp/TCom_GlassFrostedLines_1K_ao.webp">
+                <img id="floor_glass_height" src="assets/img/textures/Glass_webp/TCom_GlassFrostedLines_1K_height.webp">
+                <img id="floor_glass_roughness"
+                    src="assets/img/textures/Glass_webp/TCom_GlassFrostedLines_1K_roughness.webp">
+                <img id="floor_glass_metallic"
+                    src="assets/img/textures/Glass_webp/TCom_GlassFrostedLines_1K_metallic.webp">
 
                 <!-- Fonts -->
                 <a-asset-item id="pixel-ar" src="assets/Fonts/29LT_Arapix/29LTArapix-Regular.otf"></a-asset-item>
@@ -115,178 +376,373 @@
                 </template>
             </a-assets>
 
-
-
-            <!-- Walls -->
-            <!-- Front Wall -->
-            <a-entity geometry="primitive: box; width: 30; height: 12; depth: 0.2" position="0 6 -15" material="src: #wall;
-            repeat: 6 3;
-            normalMap: #wall-nrm;
-            normalTextureRepeat: 6 3;
-            ambientOcclusionMap: #wall-ao;
-            ambientOcclusionTextureRepeat: 6 3;
-            displacementMap: #wall-height;
-            displacementTextureRepeat: 6 3;
-            displacementBias: 0;
-            roughnessMap: #wall-roughness;
-            roughnessTextureRepeat: 6 3;
-            roughness: 0.6;
-            metalnessMap: #wall-metallic;
-            metalnessTextureRepeat: 6 3;
-            metalness: 0.1;
-            emissive: #FFFFFF;
-            side: double" custom-emissive-map="src: #wall-emissive"></a-entity>
-
-            <!-- Left Wall -->
-            <a-entity geometry="primitive: box; width: 0.2; height: 12; depth: 30" position="-15 6 0" material="src: #wall;
-                repeat: 6 3;
-                normalMap: #wall-nrm;
-                normalTextureRepeat: 6 3;
-                ambientOcclusionMap: #wall-ao;
-                ambientOcclusionTextureRepeat: 6 3;
-                displacementMap: #wall-height;
-                displacementTextureRepeat: 6 3;
-                displacementBias: 0;
-                roughnessMap: #wall-roughness;
-                roughnessTextureRepeat: 6 3;
-                roughness: 0.6;
-                metalnessMap: #wall-metallic;
-                metalnessTextureRepeat: 6 3;
-                metalness: 0.1;
-                emissive: #FFFFFF;
-                side: double" custom-emissive-map="src: #wall-emissive">
-            </a-entity>
-
-            <!-- Back Wall -->
-            <a-entity geometry="primitive: box; width: 30; height: 12; depth: 0.2" position="0 6 15" material="src: #wall;
-            repeat: 6 3;
-            normalMap: #wall-nrm;
-            normalTextureRepeat: 6 3;
-            ambientOcclusionMap: #wall-ao;
-            ambientOcclusionTextureRepeat: 6 3;
-            displacementMap: #wall-height;
-            displacementTextureRepeat: 6 3;
-            displacementBias: 0;
-            roughnessMap: #wall-roughness;
-            roughnessTextureRepeat: 6 3;
-            roughness: 0.6;
-            metalnessMap: #wall-metallic;
-            metalnessTextureRepeat: 6 3;
-            metalness: 0.1;
-            emissive: #FFFFFF;
-            side: double" custom-emissive-map="src: #wall-emissive"></a-entity>
-
-            <!-- Right Wall -->
-            <a-entity geometry="primitive: box; width: 0.2; height: 12; depth: 30" position="15 6 0" material="src: #wall;
-                repeat: 6 3;
-                normalMap: #wall-nrm;
-                normalTextureRepeat: 6 3;
-                ambientOcclusionMap: #wall-ao;
-                ambientOcclusionTextureRepeat: 6 3;
-                displacementMap: #wall-height;
-                displacementTextureRepeat: 6 3;
-                displacementBias: 0;
-                roughnessMap: #wall-roughness;
-                roughnessTextureRepeat: 6 3;
-                roughness: 0.6;
-                metalnessMap: #wall-metallic;
-                metalnessTextureRepeat: 6 3;
-                metalness: 0.1;
-                emissive: #FFFFFF;
-                side: double" custom-emissive-map="src: #wall-emissive"></a-entity>
-
             <!-- Floor -->
-            <a-plane material="src: #floor;
-                repeat: 6 6;
-                normalMap: #floor-nrm;
-                normalTextureRepeat: 6 6;
-                ambientOcclusionMap: #floor-ao;
-                ambientOcclusionTextureRepeat: 6 6;
-                displacementMap: #floor-height;
-                displacementTextureRepeat: 8 8;
-                displacementBias: -0.430;
-                roughnessMap: #floor-roughness;
-                roughnessTextureRepeat: 6 6;
-                roughness: 0.6;
-                metalnessMap: #floor-metallic;
-                metalness: 0.26;
-                metalnessTextureRepeat: 6 6;
-                emissive: #FFFFFF;
-                side: double" width="10" height="10" position="0 0.02 0" scale="3 3 1" rotation="-90 0 0"
-                custom-emissive-map="src: #floor-emissive">
+            <a-plane material="src: #floor_glass;
+                repeat: 27 27;
+                normalMap: #floor_glass_nrm;
+                normalTextureRepeat: 27 27;
+                ambientOcclusionMap: #floor_glass_ao;
+                ambientOcclusionTextureRepeat: 27 27;
+                displacementMap: #floor_glass_height;
+                displacementTextureRepeat: 27 27;
+                displacementBias: -0.02;
+                displacementScale: 0.05;
+                roughnessMap: #floor_glass_roughness;
+                roughnessTextureRepeat: 27 27;
+                roughness: 0.7;
+                opacity: 0.8;
+                metalnessMap: #floor_glass_metallic;
+                metalness: 0.1;
+                metalnessTextureRepeat: 27 27;
+                emissive: #2e2e2e;
+                color: #949494;
+                side: double" width="67.5" height="67.5" position="0 0.02 0" scale="3 3 1" rotation="-90 0 0">
             </a-plane>
 
-            <!-- Ceiling -->
-            <a-plane material="src: #wall;
-            repeat: 6 6;
-            normalMap: #wall-nrm;
-            normalTextureRepeat: 6 6;
-            ambientOcclusionMap: #wall-ao;
-            ambientOcclusionTextureRepeat: 6 6;
-            displacementMap: #wall-height;
-            displacementTextureRepeat: 6 6;
-            displacementBias: 0;
-            roughnessMap: #wall-roughness;
-            roughnessTextureRepeat: 6 6;
-            roughness: 0.6;
-            metalnessMap: #wall-metallic;
-            metalnessTextureRepeat: 6 6;
-            metalness: 0.100;
-            emissive: #FFFFFF;
-            side: double" width="10" height="10" position="0 12 0" rotation="90 0 0" scale="3 3 1"
-                custom-emissive-map="src: #wall-emissive">
-            </a-plane>
-
-            <!-- Ceiling Lamp -->
-            <a-entity id="ceiling_lamp" gltf-model="#ceiling_lamp" position="0 12 7.5" rotation="0 0 0" scale="1 0.23 1"
-                visible="true" lod="minLevel: 0; maxLevel: 2">
-                <!-- Main ambient light -->
-                <a-light type="ambient" color="#5db7ee" intensity="0.90"></a-light>
-            </a-entity>
-
-
-            <a-entity id="ceiling_lamp_2" gltf-model="#ceiling_lamp" position="0 12 -7.5" rotation="0 0 0"
-                scale="1 0.23 1">
-                <!-- Ambient light for base illumination -->
-                <a-light type="ambient" color="#FFFFFF" intensity="0.090"></a-light>
-
-            </a-entity>
-
-
+            <!-- Aurora Sky -->
+            <a-entity position="0 35.000 0" geometry="primitive: box; width: 67.5; height: 67.5; depth: 67.5;" material="shader: aurora-shader; 
+                                transparent: false; 
+                                side: back;
+                                iTime: 0;
+                                iResolution: 2048 2048;
+                                iMouse: 1024 1024;" aurora-animator scale="3 3 3"></a-entity>
 
             <!-- Environment -->
-            <!-- Desk -->
-
-            <a-entity id="scifi_desk_2" gltf-model="#scifi_desk_2" rotation="0 90 0" scale="1.5 1 2"
-                position="0 0.04 -0.5" visible="false"></a-entity>
+            <!-- Time Chamber -->
+            <a-entity id="time_chamber" gltf-model="#time_chamber" position="0 0.00 45" visible="true"
+                rotation="0 -150 0" scale="0.2 0.2 0.2"></a-entity>
 
             <!-- Main Pose Display -->
-            <a-entity id="handPoseDisplay" geometry="primitive: plane; width: 1.2; height: 0.6"
-                material="color: #000022; opacity: 0.9; transparent: true" position="0 1.8 -2.5" troika-text="value: Initializing...; 
+            <a-entity id="handPoseDisplay" geometry="primitive: plane; width: 1.2; height: 1.2"
+                material="color: #000022; opacity: 0.9; transparent: true; side: double" position="0 1.8 -3"
+                troika-text="value: Initializing...; 
                            color: #00ff88; 
                            fontSize: 0.06; 
                            align: center; 
                            baseline: center;
-                           maxWidth: 1.1;">
+                           maxWidth: 1.1;
+                           depthOffset: -0.4;" look-at="[camera]">
             </a-entity>
 
+            <!-- Left Hand Pose Display -->
+            <a-entity id="leftHandPoseDisplay" geometry="primitive: plane; width: 1.0; height: 0.5"
+                material="color: #002200; opacity: 0.9; transparent: true; side: double" position="-1.5 1.8 -3.5"
+                troika-text="value: 👈 Left Hand\n\nWaiting for pose...; 
+                           color: #00ff88; 
+                           fontSize: 0.05; 
+                           align: center; 
+                           baseline: center;
+                           maxWidth: 0.9;
+                           depthOffset: -0.4;" look-at="[camera]">
+            </a-entity>
 
-            <!-- <a-entity log geometry="primitive: plane" material="color: #111" text="color: lightgreen"
-                position="-1 1.5 -1"></a-entity> -->
+            <!-- Right Hand Pose Display -->
+            <a-entity id="rightHandPoseDisplay" geometry="primitive: plane; width: 1.0; height: 0.5"
+                material="color: #220000; opacity: 0.9; transparent: true; side: double" position="1.5 1.8 -3.5"
+                troika-text="value: 👉 Right Hand\n\nWaiting for pose...; 
+                           color: #00ff88; 
+                           fontSize: 0.05; 
+                           align: center; 
+                           baseline: center;
+                           maxWidth: 0.9;
+                           depthOffset: -0.4;" look-at="[camera]">
+            </a-entity>
+
+            <!-- Debug Log Displays (Below main displays) -->
+            <!-- Left Hand Debug Log -->
+            <a-entity id="leftDebugLog" geometry="primitive: plane; width: 1.0; height: 0.8"
+                material="color: #001100; opacity: 0.9; transparent: true; side: double" position="-1.8 0.8 0"
+                troika-text="value: 📝 LEFT HAND DEBUG LOG:\n\nInitializing...; 
+                           color: #88ff88; 
+                           fontSize: 0.04; 
+                           align: left; 
+                           baseline: center;
+                           maxWidth: 0.95;
+                           depthOffset: -0.4;" look-at="[camera]">
+            </a-entity>
+
+            <!-- Right Hand Debug Log -->
+            <a-entity id="rightDebugLog" geometry="primitive: plane; width: 1.0; height: 0.8"
+                material="color: #110000; opacity: 0.9; transparent: true; side: double" position="1.8 0.8 0"
+                troika-text="value: 📝 RIGHT HAND DEBUG LOG:\n\nInitializing...; 
+                           color: #ff8888; 
+                           fontSize: 0.04; 
+                           align: left; 
+                           baseline: center;
+                           maxWidth: 0.95;
+                           depthOffset: -0.4;" look-at="[camera]">
+            </a-entity>
+
+            <!-- Main Debug Console Log -->
+            <a-entity id="mainDebugLog" geometry="primitive: plane; width: 1.2; height: 0.8"
+                material="color: #001122; opacity: 0.9; transparent: true; side: double" position="0 0.8 -1.8"
+                troika-text="value: 📊 LIVE DEBUG CONSOLE:\n\nInitializing...; 
+                           color: #88ddff; 
+                           fontSize: 0.04; 
+                           align: left; 
+                           baseline: center;
+                           maxWidth: 1.15;
+                           depthOffset: -0.4;" look-at="[camera]">
+            </a-entity>
+
+            <!-- Sword -->
+
+
+            <!-- Quest 3 Specific Help Panel -->
+            <a-entity id="quest-help-panel" geometry="primitive: plane; width: 1.8; height: 1.2"
+                material="color: #001122; opacity: 0.9; transparent: true; side: double" position="-1.8 1.8 -3"
+                rotation="0 15 -3" troika-text="value: 📱 QUEST 3 HAND TRACKING TIPS:\n\n🔍 VULCAN FALSE POSITIVE:\n• Fully relax ALL fingers\n• Don't curl pinky/ring finger\n• Keep hand centered in view\n\n✋ FLAT PALM DETECTION:\n• Spread fingers wide & even\n• Keep palm facing cameras\n• Avoid hand shadows\n• Don't tilt hand too much\n\n📏 OPTIMAL DISTANCE:\n• 30-60cm from headset\n• Both hands in camera view\n• Good lighting on hands;
+                    color: #00ff88;
+                    fontSize: 0.045;
+                    align: center;
+                    baseline: center;
+                    maxWidth: 1.7;
+                    depthOffset: -0.4;" look-at='[camera]'>
+            </a-entity>
+
+            <!-- Pinch Status Indicators (dynamic, like the main debug panel) -->
+            <a-entity id="pinch-status-text" geometry="primitive: plane; width: 2.2; height: 1.2"
+                material="color: #001122; opacity: 0.92; transparent: true; side: double" position="1.8 1.8 -3"
+                troika-text="value: 🙌 HAND INTERACTION GUIDE 🙌\n\n🎯 POSE: Current gesture + confidence\n📊 QUALITY: Track confidence levels\n🔍 DEBUG: Live interaction logs\n\n✨ INTERACTIONS:\n🖱️ HOVER: Point at objects\n👆 CLICK: Quick pinch gesture\n✊ GRAB: Pinch + HOLD + MOVE\n👐 RELEASE: Open hand\n\n⚠️ QUEST 3 TIPS:\n• Hold hands 30-60cm from face\n• Keep hands in camera view\n• Pinch thumb+index for click\n• Hold pinch to grab & drag;
+                    color: #00ff88;
+                    fontSize: 0.05;
+                    align: center;
+                    baseline: center;
+                    maxWidth: 2.1;
+                    depthOffset: -0.4;" look-at="[camera]">
+            </a-entity>
+
+            <!-- Grab Mechanics Help Panel -->
+            <a-entity id="grab-help-panel" geometry="primitive: plane; width: 2.4; height: 0.8"
+                material="color: #112200; opacity: 0.9; transparent: true; side: double" position="0 2 -3" troika-text="value: ✊ GRAB DEBUG MODE ✊\n\n📡 First check: Ray intersection (should see red/blue lines)\n👁️ Look for: 'RAY INTERSECTED' in debug logs\n🤏 Then try: Pinch thumb+index FIRMLY\n✊ Expected: 'GRABBED' events in logs\n🔍 Debugging: Multiple grab events being tested\n\n🚨 If no ray intersection = positioning issue\n🚨 If ray works but no grab = event binding issue;
+                    color: #88ff44;
+                    fontSize: 0.045;
+                    align: center;
+                    baseline: center;
+                    maxWidth: 2.3;
+                    depthOffset: -0.4;" look-at="[camera]">
+            </a-entity>
+
+            <!-- Interactive Test Cube -->
+            <a-box id="interactive-test-cube" class="hoverable clickable" position="0 1.5 -1.8" width="0.5" height="0.5"
+                depth="0.5" color="#4ecdc4" material="transparent: true; opacity: 0.8"
+                animation__mouseenter="property: scale; to: 1.2 1.2 1.2; startEvents: mouseenter; dur: 300"
+                animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 300"
+                event-set__click="event: click; target: #click-counter; set: value: Clicks: 1;"
+                animation__click="property: rotation; to: 0 360 0; startEvents: click; dur: 1000" clickable hoverable>
+
+                <!-- Hover indicator -->
+                <a-sphere radius="0.05" position="0 0.4 0" color="#ff6b6b" visible="false"
+                    animation__hover-show="property: visible; to: true; startEvents: mouseenter"
+                    animation__hover-hide="property: visible; to: false; startEvents: mouseleave">
+                </a-sphere>
+
+                <!-- Label -->
+                <a-text value="🎯 Test Cube\nHover, Click & GRAB Me!\n✊ Pinch + Hold to Grab" position="0 0.8 0"
+                    align="center" color="#ffffff" scale="0.6 0.6 0.6" look-at="[camera]">
+                </a-text>
+
+                <!-- Grab indicator wireframe -->
+                <a-entity geometry="primitive: box; width: 0.52; height: 0.52; depth: 0.52"
+                    material="wireframe: true; color: #00ff00; opacity: 0.3; transparent: true"
+                    animation="property: rotation; to: 0 360 0; dur: 8000; loop: true">
+                </a-entity>
+
+                <!-- Click counter -->
+                <a-text id="click-counter" value="Clicks: 0" position="0 -0.4 0" align="center" color="#00ff88"
+                    scale="0.4 0.4 0.4" look-at="[camera]">
+                </a-text>
+            </a-box>
+
+            <!-- Another test object - Sphere -->
+            <a-sphere id="interactive-test-sphere" class="hoverable grabbable" position="2 1.5 -1.8" radius="0.3"
+                color="#ff6b6b" material="transparent: true; opacity: 0.8"
+                animation__mouseenter="property: color; to: #00ff00; startEvents: mouseenter; dur: 200"
+                animation__mouseleave="property: color; to: #ff6b6b; startEvents: mouseleave; dur: 200" hoverable
+                grabbable>
+
+                <!-- Label -->
+                <a-text value="🔴 Sphere\nGrabbable Ball!\n✊ Pinch + Hold" position="0 0.6 0" align="center"
+                    color="#ffffff" scale="0.5 0.5 0.5" look-at="[camera]">
+                </a-text>
+
+                <!-- Grab indicator ring -->
+                <a-ring radius-inner="0.31" radius-outer="0.33"
+                    material="color: #00ff00; opacity: 0.4; transparent: true"
+                    animation="property: rotation; to: 0 0 360; dur: 6000; loop: true">
+                </a-ring>
+            </a-sphere>
+
+            <!-- Third test object - Cylinder -->
+            <a-cylinder id="interactive-test-cylinder" class="hoverable clickable" position="-2 1.5 -1.8" radius="0.2"
+                height="0.6" color="#feca57" material="transparent: true; opacity: 0.8"
+                animation__mouseenter="property: rotation; to: 0 180 0; startEvents: mouseenter; dur: 500"
+                animation__mouseleave="property: rotation; to: 0 0 0; startEvents: mouseleave; dur: 500"
+                animation__click="property: position; to: -2 2.5 -3; startEvents: click; dur: 800; direction: alternate"
+                clickable hoverable>
+
+                <!-- Label -->
+                <a-text value="🟡 Cylinder\nGrab & Drag Me!\n✊ Pinch + Hold" position="0 0.6 0" align="center"
+                    color="#ffffff" scale="0.5 0.5 0.5" look-at="[camera]">
+                </a-text>
+
+                <!-- Grab indicator spirals -->
+                <a-torus radius="0.25" radius-tubular="0.01" material="color: #00ff00; opacity: 0.5; transparent: true"
+                    animation="property: rotation; to: 360 0 0; dur: 4000; loop: true">
+                </a-torus>
+                <a-torus radius="0.25" radius-tubular="0.01" position="0 0.3 0"
+                    material="color: #00ff00; opacity: 0.3; transparent: true"
+                    animation="property: rotation; to: -360 0 0; dur: 4000; loop: true">
+                </a-torus>
+            </a-cylinder>
+
+            <a-entity id="sword" gltf-model="#sword" position="0 1.2 -15" visible="true" scale="0.1 0.1 0.1"
+                geometry="primitive: box; width: 1; height: 5; depth: 1" material="visible: false" hoverable
+                grabbable></a-entity>
 
             <a-entity id="player" position="0 0.5 0" movement-controls="acceleration: 50; easing: 40"
                 wasd-controls="acceleration: 50; easing: 40">
 
                 <!-- Camera -->
                 <a-entity camera look-controls>
+                    <a-entity super-hands cursor="rayOrigin: mouse"
+                        raycaster="objects: .clickable, .hoverable, .grabbable; far: 5" position="0 0 -0.01">
+                    </a-entity>
                 </a-entity>
 
                 <!-- Hand Controls (manages both hands) -->
                 <a-entity id="handController" handy-controls>
+                    <!-- Screen space inputs like mobile AR -->
+                    <a-torus radius="0.008" radius-tubular="0.001" material="shader:flat;color:blue"
+                        data-none="screen-0"></a-torus>
+                    <a-torus radius="0.008" radius-tubular="0.001" material="shader:flat;color:green"
+                        data-none="screen-1"></a-torus>
+                    <a-torus radius="0.008" radius-tubular="0.001" material="shader:flat;color:red"
+                        data-none="screen-2"></a-torus>
+
+                    <!-- Objects attached to tracked hand joints -->
+                    <a-gltf-model src="#watch" data-left="wrist" position="-1000 0 0" scale="0.038 0.038 0.038">
+                        <a-sphere radius="0.02" position="0 0.02 0"
+                            sphere-collider="radius:0.02;objects:[data-right$=-tip];" exit-on="hitend"
+                            visible="false"></a-sphere>
+                    </a-gltf-model>
+                    <a-entity data-left="ring-finger-phalanx-proximal">
+                        <a-torus position="0 0 -0.03" radius="0.008" radius-tubular="0.001" scale="1 1 1.5"
+                            material="color:gold;metalness:1;roughness:0;"></a-torus>
+                    </a-entity>
+
+                    <!-- <a-entity data-right="index-finger-tip" mixin="blink"
+                        blink-controls="rotateOnTeleport:false;startEvents:pose_point_fuseShort;endEvents:pose_point_fuseLong;"></a-entity>
+                    <a-entity data-left="index-finger-tip" mixin="blink"
+                        blink-controls="rotateOnTeleport:false;startEvents:pose_point_fuseShort;endEvents:pose_point_fuseLong;"></a-entity> -->
+
+                    <!-- Ray and Grip are Available on Hands or Tracked Inputs -->
+                    <a-entity id="rightRay" data-right="ray" mixin="blink" cursor=""
+                        raycaster="objects:[html], .clickable, .hoverable, .grabbable;far:5;showLine:true;lineColor:red;"
+                        super-hands="colliderEvent:raycaster-intersected;
+                                   colliderEventProperty:els;
+                                   colliderEndEvent:raycaster-intersected-cleared;
+                                   colliderEndEventProperty:clearedEls;" ray-debug>
+                        <a-entity position="0 0 -0.22" visible="true" class="pose-label"
+                            text="value: Right Hand; align: center; color: red;"></a-entity>
+                    </a-entity>
+                    <a-entity id="leftRay" data-left="ray" mixin="blink" cursor=""
+                        raycaster="objects:[html], .clickable, .hoverable, .grabbable;far:5;showLine:true;lineColor:blue;"
+                        super-hands="colliderEvent:raycaster-intersected;
+                                   colliderEventProperty:els;
+                                   colliderEndEvent:raycaster-intersected-cleared;
+                                   colliderEndEventProperty:clearedEls;" ray-debug>
+                        <a-entity position="0 0 -0.22" visible="true" class="pose-label"
+                            text="value: Left Hand; align: center; color: blue;"></a-entity>
+                    </a-entity>
+
+                    <!-- These act like anchors pulling both hands and controllers towards grabable objects, moving the whole hand and the attached elements-->
+                    <a-entity id="right-magnet" data-right="grip"
+                        data-magnet=".magnet-right:not([data-no-magnet]),.magnet:not([data-no-magnet])"
+                        grab-magnet-target="startEvents:squeezestart,pose_fist;stopEvents:pose_flat_fuseShort,squeezeend;"></a-entity>
+                    <a-entity id="left-magnet" data-left="grip"
+                        data-magnet=".magnet-left:not([data-no-magnet]),.magnet:not([data-no-magnet])"
+                        grab-magnet-target="startEvents:squeezestart,pose_fist;stopEvents:pose_flat_fuseShort,squeezeend;"></a-entity>
+
+                    <a-entity id="left-no-magnet" data-left="grip" data-no-magnet>
+                        <a-entity html="html:#my-interface;cursor:#cursor" position="-0.142 -0.0166 -0.02928"
+                            rotation="-80 90 0" scale="0.7 0.7 0.7"></a-entity>
+                    </a-entity>
+
+                    <!-- Markers to let us know the real location of the hands -->
+                    <a-sphere id="right-no-magnet" data-right="grip" data-no-magnet radius="0.01"
+                        color="red"></a-sphere>
+                    <a-sphere id="left-no-magnet" data-left="grip" data-no-magnet radius="0.01" color="red"></a-sphere>
+
+                    <!-- Invisible objects at the tips of each finger for physics or intersections -->
+                    <a-sphere data-right="index-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-right="middle-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-right="ring-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-right="pinky-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-right="thumb-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-left="index-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-left="middle-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-left="ring-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-left="pinky-finger-tip" radius="0.01" visible="false"></a-sphere>
+                    <a-sphere data-left="thumb-tip" radius="0.01" visible="false"></a-sphere>
                 </a-entity>
             </a-entity>
+            <a-sphere color="black" radius="0.005" id="cursor" material="shader:flat" visible="false"></a-sphere>
 
         </a-scene>
+
+        <!-- DOM Overlay -->
+        <div id="dom-overlay">
+            <h1>
+                Hello World
+            </h1>
+            <div class="overlay-footer">
+                <section
+                    style="display: inline-block; background: lavenderblush; color: #333333; border-radius: 1em; padding: 1em; margin:0; accent-color: hotpink;"
+                    id="my-interface">
+                    <h2>Settings</h2>
+                    <fieldset style="border:none;">
+                        <legend>Thumbstick Behaviour</legend>
+                        <input onclick="toggleThumbstick(this)" type="radio" id="thumbstick-teleport" name="thumbstick"
+                            value="teleport" checked><label for="thumbstick-teleport"> Teleport</label>
+                        <input onclick="toggleThumbstick(this)" type="radio" id="thumbstick-move" name="thumbstick"
+                            value="move"><label for="thumbstick-move"> Move</label>
+                    </fieldset>
+                    <button onclick="AFRAME.scenes[0].exitVR()" style="display: block;">Exit Immersive</button>
+                </section>
+
+                <!-- HTML form logic -->
+                <script>
+                    let movementType = 'teleport';
+                    function toggleThumbstick(detail) {
+                        const rayPointers = ['[data-right="ray"]', '[data-left="ray"]'].map(s => document.querySelector(s));
+                        const type = detail.value;
+                        movementType = type;
+                        if (type === 'move') {
+                            cameraRig.setAttribute('movement-controls', 'enabled', true);
+                            for (const p of rayPointers) p.removeAttribute('mixin');
+                        }
+                        if (type === 'teleport') {
+                            cameraRig.setAttribute('movement-controls', 'enabled', false);
+                            for (const p of rayPointers) p.setAttribute('mixin', 'blink');
+                        }
+                    }
+                    // If the user is teleporting disable movement-controls in XR
+                    const sceneEl = document.querySelector("a-scene");
+                    sceneEl.addEventListener("enter-vr", function () {
+                        if (movementType === 'teleport') {
+                            cameraRig.setAttribute('movement-controls', 'enabled', false);
+                        }
+                    });
+                    sceneEl.addEventListener("exit-vr", function () {
+                        cameraRig.setAttribute('movement-controls', 'enabled', true);
+                    });
+                </script>
+                <div id="dom-overlay-message">Enter AR or VR to start.</div>
+            </div>
+        </div>
+
+
     </body>
 
 </html>
