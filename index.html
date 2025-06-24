@@ -29,6 +29,7 @@
         <script src="https://unpkg.com/aframe-look-at-component@^1.0.0/dist/aframe-look-at-component.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/aframe-htmlmesh@2.4.0/build/aframe-html.min.js"></script>
         <script src="components/fx.js"></script>
+        <script src="components/super-integration.js"></script>
         <script src="shaders/aurora-shader.js"></script>
         <script>
             window.addEventListener("DOMContentLoaded", function () {
@@ -280,6 +281,68 @@
                         console.log('🎯 VR mode started');
                         addDebugMessage('VR mode started');
                     });
+
+                    // Set up super-hands event debugging
+                    this.setupSuperHandsDebug();
+                },
+
+                setupSuperHandsDebug: function () {
+                    // Simplified debug - just listen for super-hands events (emission is handled by super-integration component)
+                    const grabbableEntities = document.querySelectorAll('.grabbable');
+                    const stretchableEntities = document.querySelectorAll('.stretchable');
+
+                    // Listen for grab events on all grabbable entities
+                    grabbableEntities.forEach(entity => {
+                        entity.addEventListener('hover-start', function (event) {
+                            console.log('🎯 SUPER-HANDS: hover-start on', entity.id, event.detail);
+                            if (window.addDebugMessage) {
+                                window.addDebugMessage('🎯 HOVER START: ' + entity.id);
+                            }
+                        });
+
+                        entity.addEventListener('hover-end', function (event) {
+                            console.log('🎯 SUPER-HANDS: hover-end on', entity.id, event.detail);
+                            if (window.addDebugMessage) {
+                                window.addDebugMessage('🎯 HOVER END: ' + entity.id);
+                            }
+                        });
+
+                        entity.addEventListener('grab-start', function (event) {
+                            console.log('✊ SUPER-HANDS: grab-start on', entity.id, event.detail);
+                            if (window.addDebugMessage) {
+                                window.addDebugMessage('✊ GRAB START: ' + entity.id + ' by ' + (event.detail.hand ? event.detail.hand.id : 'unknown'));
+                            }
+                        });
+
+                        entity.addEventListener('grab-end', function (event) {
+                            console.log('👐 SUPER-HANDS: grab-end on', entity.id, event.detail);
+                            if (window.addDebugMessage) {
+                                window.addDebugMessage('👐 GRAB END: ' + entity.id + ' by ' + (event.detail.hand ? event.detail.hand.id : 'unknown'));
+                            }
+                        });
+                    });
+
+                    // Listen for stretch events on all stretchable entities
+                    stretchableEntities.forEach(entity => {
+                        entity.addEventListener('stretch-start', function (event) {
+                            console.log('✋✋ SUPER-HANDS: stretch-start on', entity.id, event.detail);
+                            if (window.addDebugMessage) {
+                                window.addDebugMessage('✋✋ STRETCH START: ' + entity.id);
+                            }
+                        });
+
+                        entity.addEventListener('stretch-end', function (event) {
+                            console.log('👐👐 SUPER-HANDS: stretch-end on', entity.id, event.detail);
+                            if (window.addDebugMessage) {
+                                window.addDebugMessage('👐👐 STRETCH END: ' + entity.id);
+                            }
+                        });
+                    });
+
+                    console.log('🔧 Super-hands debug listeners set up for', grabbableEntities.length, 'grabbable and', stretchableEntities.length, 'stretchable entities');
+                    if (window.addDebugMessage) {
+                        window.addDebugMessage('🔧 Super-hands debug ready (via super-integration)');
+                    }
                 }
             });
 
@@ -341,7 +404,7 @@
             environment=" preset:default;ground: flat; groundTexture: none; lighting: distant; shadow: false; fog: 0.1"
             renderer="antialias: true" loading-screen="enabled: false" vr-mode-ui="enterVRButton: #enter-vr-button"
             webxr="optionalFeatures: hand-tracking,local-floor; overlayElement:#dom-overlay;" show-hand-pose
-            hand-quality-monitor ar-cursor>
+            hand-quality-monitor ar-cursor super-integration="rightRay: #rightRay; leftRay: #leftRay; debug: true">
 
             <a-assets timeout="10000">
 
@@ -501,11 +564,11 @@
             </a-entity>
 
             <!-- Pinch Status Indicators (dynamic, like the main debug panel) -->
-            <a-entity id="pinch-status-text" geometry="primitive: plane; width: 2.2; height: 1.2"
+            <a-entity id="pinch-status-text" geometry="primitive: plane; width: 2.2; height: 1.4"
                 material="color: #001122; opacity: 0.92; transparent: true; side: double" position="1.8 1.8 -3"
-                troika-text="value: 🙌 HAND INTERACTION GUIDE 🙌\n\n🎯 POSE: Current gesture + confidence\n📊 QUALITY: Track confidence levels\n🔍 DEBUG: Live interaction logs\n\n✨ INTERACTIONS:\n🖱️ HOVER: Point at objects\n👆 CLICK: Quick pinch gesture\n✊ GRAB: Pinch + HOLD + MOVE\n👐 RELEASE: Open hand\n\n⚠️ QUEST 3 TIPS:\n• Hold hands 30-60cm from face\n• Keep hands in camera view\n• Pinch thumb+index for click\n• Hold pinch to grab & drag;
+                troika-text="value: 🙌 SUPER-HANDS TESTING 🙌\n\n🎯 POSE: Current gesture + confidence\n📊 QUALITY: Track confidence levels\n🔍 DEBUG: Live interaction logs\n\n✨ AVAILABLE INTERACTIONS:\n🔴 GRAB: Sphere - Single hand pinch\n🟣 STRETCH: Plane - Single hand test\n🟡 CLICK: Cylinder - Quick pinch\n🟦 HOVER: All objects\n\n⚠️ SINGLE-HAND STRETCH TEST:\n• Point at purple plane (see indicators)\n• Pinch once → stretch-start\n• Release → stretch-end;
                     color: #00ff88;
-                    fontSize: 0.05;
+                    fontSize: 0.045;
                     align: center;
                     baseline: center;
                     maxWidth: 2.1;
@@ -513,10 +576,11 @@
             </a-entity>
 
             <!-- Grab Mechanics Help Panel -->
-            <a-entity id="grab-help-panel" geometry="primitive: plane; width: 2.4; height: 0.8"
-                material="color: #112200; opacity: 0.9; transparent: true; side: double" position="0 2 -3" troika-text="value: ✊ GRAB DEBUG MODE ✊\n\n📡 First check: Ray intersection (should see red/blue lines)\n👁️ Look for: 'RAY INTERSECTED' in debug logs\n🤏 Then try: Pinch thumb+index FIRMLY\n✊ Expected: 'GRABBED' events in logs\n🔍 Debugging: Multiple grab events being tested\n\n🚨 If no ray intersection = positioning issue\n🚨 If ray works but no grab = event binding issue;
+            <a-entity id="grab-help-panel" geometry="primitive: plane; width: 2.4; height: 1.0"
+                material="color: #112200; opacity: 0.9; transparent: true; side: double" position="0 2.2 -3"
+                troika-text="value: 🔗 SIMPLIFIED STRETCH TEST 🔗\n\n🔴 SPHERE (GRAB):\n🤏 Step 1: Point → GREEN GLOW\n🖱️ Step 2: Pinch → grab-start\n🏃 Step 3: Sphere follows hand\n\n🟣 PLANE (STRETCH TEST):\n✋ Step 1: Point at plane → hand indicator\n🤏 Step 2: Pinch → stretch-start\n🔄 Step 3: Test super-hands stretchable\n\n🚨 Debug Chain:\n• Look for hand intersection indicators\n• MOUSEDOWN → stretch-start events;
                     color: #88ff44;
-                    fontSize: 0.045;
+                    fontSize: 0.04;
                     align: center;
                     baseline: center;
                     maxWidth: 2.3;
@@ -554,16 +618,19 @@
                 </a-text>
             </a-box>
 
-            <!-- Another test object - Sphere -->
+            <!-- Another test object - Sphere (Super-Hands + Manual Events) -->
             <a-sphere id="interactive-test-sphere" class="hoverable grabbable" position="2 1.5 -1.8" radius="0.3"
-                color="#ff6b6b" material="transparent: true; opacity: 0.8"
+                color="#ff6b6b" material="transparent: true; opacity: 0.8" hoverable grabbable
+                event-set__hover-visual="event: hover-start; material.color: #00ff00; material.emissive: #002200"
+                event-set__unhover-visual="event: hover-end; material.color: #ff6b6b; material.emissive: #000000"
+                event-set__grabbed-visual="event: grab-start; material.color: #ffaa00; material.emissive: #440000; scale: 1.2 1.2 1.2"
+                event-set__released-visual="event: grab-end; material.color: #ff6b6b; material.emissive: #000000; scale: 1 1 1"
                 animation__mouseenter="property: color; to: #00ff00; startEvents: mouseenter; dur: 200"
-                animation__mouseleave="property: color; to: #ff6b6b; startEvents: mouseleave; dur: 200" hoverable
-                grabbable>
+                animation__mouseleave="property: color; to: #ff6b6b; startEvents: mouseleave; dur: 200">
 
                 <!-- Label -->
-                <a-text value="🔴 Sphere\nGrabbable Ball!\n✊ Pinch + Hold" position="0 0.6 0" align="center"
-                    color="#ffffff" scale="0.5 0.5 0.5" look-at="[camera]">
+                <a-text value="🔴 Super-Hands Sphere!\nPinch to grab & drag\n🤏 Event-Set Triggered" position="0 0.6 0"
+                    align="center" color="#ffffff" scale="0.5 0.5 0.5" look-at="[camera]">
                 </a-text>
 
                 <!-- Grab indicator ring -->
@@ -571,6 +638,12 @@
                     material="color: #00ff00; opacity: 0.4; transparent: true"
                     animation="property: rotation; to: 0 0 360; dur: 6000; loop: true">
                 </a-ring>
+
+                <!-- Grab status indicator -->
+                <a-sphere radius="0.05" position="0 0.4 0" color="#ff0000" visible="false"
+                    event-set__show-grabbed="event: grab-start; visible: true"
+                    event-set__hide-released="event: grab-end; visible: false">
+                </a-sphere>
             </a-sphere>
 
             <!-- Third test object - Cylinder -->
@@ -595,6 +668,55 @@
                     animation="property: rotation; to: -360 0 0; dur: 4000; loop: true">
                 </a-torus>
             </a-cylinder>
+
+            <!-- Fourth test object - Stretchable Plane -->
+            <a-plane id="interactive-test-plane" class="hoverable stretchable" position="2 1.5 0" width="1"
+                rotation="0 -90 0" height="1" color="#9b59b6" material="transparent: true; opacity: 0.8" hoverable
+                stretchable
+                event-set__hover-visual="event: hover-start; material.color: #00ff00; material.emissive: #002200"
+                event-set__unhover-visual="event: hover-end; material.color: #9b59b6; material.emissive: #000000"
+                event-set__stretched-visual="event: stretch-start; material.color: #ff6600; material.emissive: #660000"
+                event-set__unstretched-visual="event: stretch-end; material.color: #9b59b6; material.emissive: #000000">
+
+                <!-- Label -->
+                <a-text value="🟣 Stretchable Plane!\nSingle-hand stretch test\n✋ Point + Pinch = Stretch"
+                    position="0 0.7 0.01" align="center" color="#ffffff" scale="0.6 0.6 0.6" look-at="[camera]">
+                </a-text>
+
+                <!-- Stretch indicators -->
+                <a-ring radius-inner="0.45" radius-outer="0.50" position="-0.3 0 0.01"
+                    material="color: #ff0066; opacity: 0.6; transparent: true"
+                    animation="property: rotation; to: 0 0 360; dur: 3000; loop: true">
+                </a-ring>
+                <a-ring radius-inner="0.45" radius-outer="0.50" position="0.3 0 0.01"
+                    material="color: #ff0066; opacity: 0.6; transparent: true"
+                    animation="property: rotation; to: 0 0 -360; dur: 3000; loop: true">
+                </a-ring>
+
+                <!-- Stretch status indicator -->
+                <a-sphere radius="0.06" position="0 0.4 0.01" color="#ff0000" visible="false"
+                    event-set__show-stretched="event: stretch-start; visible: true"
+                    event-set__hide-unstretched="event: stretch-end; visible: false">
+                </a-sphere>
+
+                <!-- Hand position indicators -->
+                <a-sphere radius="0.03" position="-0.3 0 0.01" color="#0066ff" visible="false" id="left-hand-indicator">
+                </a-sphere>
+                <a-sphere radius="0.03" position="0.3 0 0.01" color="#ff0066" visible="false" id="right-hand-indicator">
+                </a-sphere>
+            </a-plane>
+
+            <!-- HTML App Bar Panel (Left Side) -->
+            <a-entity id="app-bar-panel" position="-1.5 1.8 0" look-at="[camera]" width="2" height="1" scale="2 2 2"
+                material="color: #ffffff; transparent: true; opacity: 0.02; side: double"
+                html="html: #app-bar-interface; cursor: #cursor">
+            </a-entity>
+
+            <!-- VR Feedback Form Panel (Right Side) -->
+            <a-entity id="vr-form-panel" position="-1.5 1.8 1.200" look-at="[camera]" width="2" height="1.8"
+                scale="2 2 2" material="color: #ffffff; transparent: true; opacity: 0.02; side: double"
+                html="html: #vr-form-interface; cursor: #cursor">
+            </a-entity>
 
             <a-entity id="sword" gltf-model="#sword" position="0 1.2 -15" visible="true" scale="0.1 0.1 0.1"
                 geometry="primitive: box; width: 1; height: 5; depth: 1" material="visible: false" hoverable
@@ -690,6 +812,278 @@
             <a-sphere color="black" radius="0.005" id="cursor" material="shader:flat" visible="false"></a-sphere>
 
         </a-scene>
+
+        <!-- App Bar HTML Section (Simplified to prevent z-fighting) -->
+        <div id="app-bar-interface" style="
+            width: 400px; 
+            height: 600px; 
+            background: #667eea;
+            border: 3px solid #764ba2;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        ">
+            <!-- App Bar Header -->
+            <div style="
+                background: #5a67d8;
+                padding: 16px 20px;
+                border-bottom: 3px solid #764ba2;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            ">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="
+                        width: 32px; 
+                        height: 32px; 
+                        background: #ff6b6b; 
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-weight: bold;
+                        font-size: 16px;
+                    ">VR</div>
+                    <h2 style="margin: 0; color: white; font-size: 18px;">Control Panel</h2>
+                </div>
+                <div style="color: white; font-size: 14px;">12:34 PM</div>
+            </div>
+
+            <!-- Navigation Menu -->
+            <div style="padding: 20px; background: #667eea;">
+                <h3 style="color: white; margin: 0 0 16px 0; font-size: 16px;">Navigation</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <button onclick="console.log('Home clicked')" style="
+                        background: #5a67d8;
+                        border: 2px solid #4c63d2;
+                        color: white;
+                        padding: 12px 16px;
+                        cursor: pointer;
+                        font-size: 14px;
+                    " onmouseover="this.style.background='#4c63d2'" onmouseout="this.style.background='#5a67d8'">
+                        🏠 Home
+                    </button>
+                    <button onclick="console.log('Settings clicked')" style="
+                        background: #5a67d8;
+                        border: 2px solid #4c63d2;
+                        color: white;
+                        padding: 12px 16px;
+                        cursor: pointer;
+                        font-size: 14px;
+                    " onmouseover="this.style.background='#4c63d2'" onmouseout="this.style.background='#5a67d8'">
+                        ⚙️ Settings
+                    </button>
+                    <button onclick="console.log('Tools clicked')" style="
+                        background: #5a67d8;
+                        border: 2px solid #4c63d2;
+                        color: white;
+                        padding: 12px 16px;
+                        cursor: pointer;
+                        font-size: 14px;
+                    " onmouseover="this.style.background='#4c63d2'" onmouseout="this.style.background='#5a67d8'">
+                        🔧 Tools
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div style="padding: 0 20px 20px; background: #667eea;">
+                <h3 style="color: white; margin: 0 0 16px 0; font-size: 16px;">Quick Actions</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <button onclick="AFRAME.scenes[0].enterVR()" style="
+                        background: #2ed573;
+                        border: 2px solid #26d464;
+                        color: white;
+                        padding: 16px 12px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: bold;
+                    " onmouseover="this.style.background='#26d464'" onmouseout="this.style.background='#2ed573'">
+                        🥽 Enter VR
+                    </button>
+                    <button onclick="AFRAME.scenes[0].exitVR()" style="
+                        background: #ff6b6b;
+                        border: 2px solid #ff5252;
+                        color: white;
+                        padding: 16px 12px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: bold;
+                    " onmouseover="this.style.background='#ff5252'" onmouseout="this.style.background='#ff6b6b'">
+                        🚪 Exit VR
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Panel -->
+            <div style="
+                margin: 0 20px 20px;
+                background: #5a67d8;
+                border: 2px solid #4c63d2;
+                padding: 16px;
+            ">
+                <h4 style="color: white; margin: 0 0 12px 0; font-size: 14px;">System Status</h4>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; color: white; font-size: 12px;">
+                        <span>Hand Tracking:</span>
+                        <span style="color: #2ed573;">🟢 Active</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; color: white; font-size: 12px;">
+                        <span>Controllers:</span>
+                        <span style="color: #ff6b6b;">🔴 Offline</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; color: white; font-size: 12px;">
+                        <span>Tracking:</span>
+                        <span style="color: #ffa502;">🟡 6DOF</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VR Feedback Form HTML Section -->
+        <div id="vr-form-interface" style="
+            width: 400px; 
+            height: 600px; 
+            background: #ffffff;
+            border: 3px solid #4285f4;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        ">
+            <!-- Iframe Header -->
+            <div style="
+                background: #4285f4;
+                padding: 16px 20px;
+                border-bottom: 3px solid #1a73e8;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            ">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="
+                        width: 32px; 
+                        height: 32px; 
+                        background: #ffffff; 
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #4285f4;
+                        font-weight: bold;
+                        font-size: 16px;
+                    ">📝</div>
+                    <h2 style="margin: 0; color: white; font-size: 18px;">VR Feedback Form</h2>
+                </div>
+                <div style="color: white; font-size: 14px;">📊 Form Input</div>
+            </div>
+
+            <!-- Form Inputs Container -->
+            <div style="
+                height: calc(100% - 80px);
+                padding: 20px;
+                background: #ffffff;
+                overflow-y: auto;
+            ">
+                <form style="display: flex; flex-direction: column; gap: 16px;">
+                    <div>
+                        <label style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">Name:</label>
+                        <input type="text" placeholder="Enter your name" style="
+                            width: 100%; 
+                            padding: 8px 12px; 
+                            border: 2px solid #4285f4; 
+                            font-size: 14px;
+                            box-sizing: border-box;
+                        ">
+                    </div>
+
+                    <div>
+                        <label
+                            style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">Email:</label>
+                        <input type="email" placeholder="your.email@example.com" style="
+                            width: 100%; 
+                            padding: 8px 12px; 
+                            border: 2px solid #4285f4; 
+                            font-size: 14px;
+                            box-sizing: border-box;
+                        ">
+                    </div>
+
+                    <div>
+                        <label style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">VR
+                            Experience:</label>
+                        <select style="
+                            width: 100%; 
+                            padding: 8px 12px; 
+                            border: 2px solid #4285f4; 
+                            font-size: 14px;
+                            box-sizing: border-box;
+                        ">
+                            <option>Beginner</option>
+                            <option>Intermediate</option>
+                            <option>Advanced</option>
+                            <option>Expert</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">Favorite VR
+                            Features:</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <label style="display: flex; align-items: center; gap: 8px; color: #333;">
+                                <input type="checkbox"> Hand Tracking
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; color: #333;">
+                                <input type="checkbox"> Voice Commands
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; color: #333;">
+                                <input type="checkbox"> Spatial Audio
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; color: #333;">
+                                <input type="checkbox"> Haptic Feedback
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label
+                            style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">Comments:</label>
+                        <textarea placeholder="Share your VR thoughts..." style="
+                            width: 100%; 
+                            height: 80px;
+                            padding: 8px 12px; 
+                            border: 2px solid #4285f4; 
+                            font-size: 14px;
+                            box-sizing: border-box;
+                            resize: vertical;
+                            font-family: Arial, sans-serif;
+                        "></textarea>
+                    </div>
+
+                    <div style="display: flex; gap: 12px;">
+                        <button type="submit" style="
+                            flex: 1;
+                            background: #4285f4;
+                            color: white;
+                            border: none;
+                            padding: 12px 16px;
+                            font-size: 14px;
+                            font-weight: bold;
+                            cursor: pointer;
+                        " onmouseover="this.style.background='#1a73e8'" onmouseout="this.style.background='#4285f4'">
+                            🚀 Submit
+                        </button>
+                        <button type="reset" style="
+                            flex: 1;
+                            background: #f8f9fa;
+                            color: #333;
+                            border: 2px solid #dadce0;
+                            padding: 12px 16px;
+                            font-size: 14px;
+                            cursor: pointer;
+                        " onmouseover="this.style.background='#e8eaed'" onmouseout="this.style.background='#f8f9fa'">
+                            🔄 Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <!-- DOM Overlay -->
         <div id="dom-overlay">
