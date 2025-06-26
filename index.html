@@ -27,373 +27,14 @@
         <script src="https://unpkg.com/aframe-log-component/dist/aframe-log-component.min.js"></script>
 
         <script src="https://unpkg.com/aframe-look-at-component@^1.0.0/dist/aframe-look-at-component.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/aframe-htmlmesh@2.4.0/build/aframe-html.min.js"></script>
+        <script src="components/aframe-html.min.js"></script>
+
         <script src="components/fx.js"></script>
         <script src="components/super-integration.js"></script>
         <script src="shaders/aurora-shader.js"></script>
         <script>
             window.addEventListener("DOMContentLoaded", function () {
                 const sceneEl = document.querySelector("a-scene");
-
-                const labels = Array.from(document.querySelectorAll('.pose-label'));
-                for (const el of labels) {
-                    el.parentNode.addEventListener('pose', function (event) {
-                        el.setAttribute('text', 'value', event.detail.pose);
-                    });
-                    el.parentNode.addEventListener('gamepad', function (event) {
-                        el.setAttribute('text', 'value', event.detail.event);
-                    });
-                }
-
-            });
-
-
-
-
-            // Hand tracking quality monitor
-            AFRAME.registerComponent('hand-quality-monitor', {
-                init: function () {
-                    this.leftHandVisible = false;
-                    this.rightHandVisible = false;
-                    this.leftHandQuality = 'unknown';
-                    this.rightHandQuality = 'unknown';
-
-                    console.log('👁️ Hand quality monitor initialized');
-                    // addDebugMessage will be available after show-hand-pose component initializes
-                },
-
-                tick: function () {
-                    var scene = document.querySelector('a-scene');
-                    if (!scene.is('vr-mode') || !scene.renderer.xr.isPresenting) return;
-
-                    var session = scene.renderer.xr.getSession();
-                    var frame = scene.frame;
-                    var referenceSpace = scene.renderer.xr.getReferenceSpace();
-
-                    if (!session || !frame || !referenceSpace) return;
-
-                    for (var inputSource of session.inputSources) {
-                        if (inputSource.hand) {
-                            var handedness = inputSource.handedness;
-                            var wrist = frame.getJointPose(inputSource.hand.get("wrist"), referenceSpace);
-
-                            if (wrist) {
-                                // Check hand distance from headset (approximate)
-                                var distance = Math.sqrt(
-                                    wrist.transform.position.x * wrist.transform.position.x +
-                                    wrist.transform.position.y * wrist.transform.position.y +
-                                    wrist.transform.position.z * wrist.transform.position.z
-                                );
-
-                                var quality = 'Good';
-                                if (distance < 0.25) quality = 'Too Close';
-                                else if (distance > 0.8) quality = 'Too Far';
-                                else if (wrist.transform.position.x > 0.4 || wrist.transform.position.x < -0.4) quality = 'Off Center';
-
-                                if (handedness === 'left') {
-                                    var prevQuality = this.leftHandQuality;
-                                    this.leftHandVisible = true;
-                                    this.leftHandQuality = quality;
-
-                                    // Log quality changes to VR display
-                                    if (prevQuality !== quality && quality !== 'Good' && window.addDebugMessage) {
-                                        window.addDebugMessage('LEFT hand: ' + quality + ' (dist: ' + distance.toFixed(2) + 'm)', 'warn');
-                                    }
-                                } else {
-                                    var prevQuality = this.rightHandQuality;
-                                    this.rightHandVisible = true;
-                                    this.rightHandQuality = quality;
-
-                                    // Log quality changes to VR display
-                                    if (prevQuality !== quality && quality !== 'Good' && window.addDebugMessage) {
-                                        window.addDebugMessage('RIGHT hand: ' + quality + ' (dist: ' + distance.toFixed(2) + 'm)', 'warn');
-                                    }
-                                }
-                            } else {
-                                if (handedness === 'left') this.leftHandVisible = false;
-                                else this.rightHandVisible = false;
-                            }
-                        }
-                    }
-                }
-            });
-
-            AFRAME.registerComponent('show-hand-pose', {
-                init: function () {
-                    var rightRay = document.querySelector('#rightRay');
-                    var leftRay = document.querySelector('#leftRay');
-                    var poseDisplayEl = document.querySelector('#handPoseDisplay');
-                    var leftPoseDisplayEl = document.querySelector('#leftHandPoseDisplay');
-                    var rightPoseDisplayEl = document.querySelector('#rightHandPoseDisplay');
-
-                    var leftPose = 'none';
-                    var rightPose = 'none';
-                    var debugLog = [];
-                    var maxLogEntries = 8;
-
-                    // Function to add debug messages to VR displays
-                    function addDebugMessage(message, type = 'info') {
-                        var timestamp = new Date().toLocaleTimeString();
-                        var emoji = type === 'warn' ? '⚠️' : type === 'error' ? '❌' : 'ℹ️';
-                        var logEntry = '[' + timestamp + '] ' + emoji + ' ' + message;
-
-                        debugLog.unshift(logEntry);
-                        if (debugLog.length > maxLogEntries) {
-                            debugLog.pop();
-                        }
-                        updateDebugDisplays();
-                    }
-
-                    // Make addDebugMessage globally available
-                    window.addDebugMessage = addDebugMessage;
-
-                    function updateDebugDisplays() {
-                        var leftLogEl = document.querySelector('#leftDebugLog');
-                        var rightLogEl = document.querySelector('#rightDebugLog');
-                        var mainLogEl = document.querySelector('#mainDebugLog');
-
-                        if (leftLogEl && rightLogEl && mainLogEl) {
-                            var logText = debugLog.join('\n');
-
-                            leftLogEl.setAttribute('troika-text', 'value',
-                                '📝 LEFT HAND DEBUG LOG:\n\n' + logText);
-                            rightLogEl.setAttribute('troika-text', 'value',
-                                '📝 RIGHT HAND DEBUG LOG:\n\n' + logText);
-                            mainLogEl.setAttribute('troika-text', 'value',
-                                '📊 LIVE DEBUG CONSOLE:\n\n' + logText);
-                        }
-                    }
-
-                    var poseDescriptions = {
-                        fist: '✊ Fist',
-                        flat: '✋ Open Palm',
-                        point: '👉 Pointing',
-                        horns: '🤘 Rock On',
-                        shaka: '🤙 Hang Loose',
-                        vulcan: '🖖 Live Long & Prosper',
-                        relax: '👋 Relaxed',
-                        none: '❓ No pose',
-                        unknown: '❓ Unknown'
-                    };
-
-                    function updateLeftPose(event) {
-                        leftPose = (event.detail && event.detail.pose) ? event.detail.pose : 'unknown';
-                        var description = poseDescriptions[leftPose] || leftPose;
-                        var timestamp = new Date().toLocaleTimeString();
-                        var confidence = event.detail && event.detail.confidence ? event.detail.confidence.toFixed(3) : 'N/A';
-
-                        // Update left panel with more debug info
-                        leftPoseDisplayEl.setAttribute('troika-text', 'value',
-                            '👈 Left Hand [' + timestamp + ']\n\n' + description +
-                            '\nConfidence: ' + confidence);
-
-                        // Update main panel with both poses
-                        updateMainDisplay();
-
-                        console.log('🎯 LEFT HAND POSE:', leftPose, 'Confidence:', confidence);
-                        addDebugMessage('LEFT: ' + leftPose + ' (conf: ' + confidence + ')');
-
-                        // Special debugging for common false positives
-                        if (leftPose === 'vulcan' && confidence !== 'N/A' && parseFloat(confidence) < 0.8) {
-                            var warnMsg = 'LOW CONFIDENCE VULCAN - might be false positive. Try fully relaxing all fingers.';
-                            console.warn('⚠️ ' + warnMsg);
-                            addDebugMessage('LEFT: ' + warnMsg, 'warn');
-                        }
-                        if (leftPose === 'flat' && confidence !== 'N/A' && parseFloat(confidence) < 0.7) {
-                            var warnMsg = 'LOW CONFIDENCE FLAT - try spreading fingers more clearly and evenly.';
-                            console.warn('⚠️ ' + warnMsg);
-                            addDebugMessage('LEFT: ' + warnMsg, 'warn');
-                        }
-                    }
-
-                    function updateRightPose(event) {
-                        rightPose = (event.detail && event.detail.pose) ? event.detail.pose : 'unknown';
-                        var description = poseDescriptions[rightPose] || rightPose;
-                        var timestamp = new Date().toLocaleTimeString();
-                        var confidence = event.detail && event.detail.confidence ? event.detail.confidence.toFixed(3) : 'N/A';
-
-                        // Update right panel with more debug info
-                        rightPoseDisplayEl.setAttribute('troika-text', 'value',
-                            '👉 Right Hand [' + timestamp + ']\n\n' + description +
-                            '\nConfidence: ' + confidence);
-
-                        // Update main panel with both poses
-                        updateMainDisplay();
-
-                        console.log('🎯 RIGHT HAND POSE:', rightPose, 'Confidence:', confidence);
-                        addDebugMessage('RIGHT: ' + rightPose + ' (conf: ' + confidence + ')');
-
-                        // Special debugging for common false positives
-                        if (rightPose === 'vulcan' && confidence !== 'N/A' && parseFloat(confidence) < 0.8) {
-                            var warnMsg = 'LOW CONFIDENCE VULCAN - might be false positive. Try fully relaxing all fingers.';
-                            console.warn('⚠️ ' + warnMsg);
-                            addDebugMessage('RIGHT: ' + warnMsg, 'warn');
-                        }
-                        if (rightPose === 'flat' && confidence !== 'N/A' && parseFloat(confidence) < 0.7) {
-                            var warnMsg = 'LOW CONFIDENCE FLAT - try spreading fingers more clearly and evenly.';
-                            console.warn('⚠️ ' + warnMsg);
-                            addDebugMessage('RIGHT: ' + warnMsg, 'warn');
-                        }
-                    }
-
-
-
-                    function updateMainDisplay() {
-                        var leftDesc = poseDescriptions[leftPose] || leftPose;
-                        var rightDesc = poseDescriptions[rightPose] || rightPose;
-                        var timestamp = new Date().toLocaleTimeString();
-                        var qualityMonitor = document.querySelector('a-scene').components['hand-quality-monitor'];
-
-                        var message = '🙌 Hand Tracking Debug [' + timestamp + ']\n\n';
-                        message += '👈 Left: ' + leftDesc + '\n';
-                        message += '👉 Right: ' + rightDesc;
-
-                        // Add hand tracking quality info
-                        message += '\n\n--- Tracking Quality ---';
-                        if (qualityMonitor) {
-                            message += '\n👈 LEFT: ' + (qualityMonitor.leftHandVisible ? qualityMonitor.leftHandQuality : 'Not Visible');
-                            message += '\n👉 RIGHT: ' + (qualityMonitor.rightHandVisible ? qualityMonitor.rightHandQuality : 'Not Visible');
-                        }
-
-                        poseDisplayEl.setAttribute('troika-text', 'value', message);
-                    }
-
-                    // Set up event listeners
-                    if (rightRay) {
-                        rightRay.addEventListener('pose', updateRightPose);
-                        console.log('✅ Right hand pose listener added');
-                    } else {
-                        console.log('❌ Right ray not found');
-                    }
-
-                    if (leftRay) {
-                        leftRay.addEventListener('pose', updateLeftPose);
-                        console.log('✅ Left hand pose listener added');
-                    } else {
-                        console.log('❌ Left ray not found');
-                    }
-
-                    console.log('🎯 Hand pose tracking initialized for both hands');
-                    addDebugMessage('Hand pose tracking initialized');
-
-                    // Set up VR mode detection
-                    this.el.sceneEl.addEventListener('enter-vr', function () {
-                        console.log('🎯 VR mode started');
-                        addDebugMessage('VR mode started');
-                    });
-
-                    // Set up super-hands event debugging
-                    this.setupSuperHandsDebug();
-                },
-
-                setupSuperHandsDebug: function () {
-                    // Simplified debug - just listen for super-hands events (emission is handled by super-integration component)
-                    const grabbableEntities = document.querySelectorAll('.grabbable');
-                    const stretchableEntities = document.querySelectorAll('.stretchable');
-
-                    // Listen for grab events on all grabbable entities
-                    grabbableEntities.forEach(entity => {
-                        entity.addEventListener('hover-start', function (event) {
-                            console.log('🎯 SUPER-HANDS: hover-start on', entity.id, event.detail);
-                            if (window.addDebugMessage) {
-                                window.addDebugMessage('🎯 HOVER START: ' + entity.id);
-                            }
-                        });
-
-                        entity.addEventListener('hover-end', function (event) {
-                            console.log('🎯 SUPER-HANDS: hover-end on', entity.id, event.detail);
-                            if (window.addDebugMessage) {
-                                window.addDebugMessage('🎯 HOVER END: ' + entity.id);
-                            }
-                        });
-
-                        entity.addEventListener('grab-start', function (event) {
-                            console.log('✊ SUPER-HANDS: grab-start on', entity.id, event.detail);
-                            if (window.addDebugMessage) {
-                                window.addDebugMessage('✊ GRAB START: ' + entity.id + ' by ' + (event.detail.hand ? event.detail.hand.id : 'unknown'));
-                            }
-                        });
-
-                        entity.addEventListener('grab-end', function (event) {
-                            console.log('👐 SUPER-HANDS: grab-end on', entity.id, event.detail);
-                            if (window.addDebugMessage) {
-                                window.addDebugMessage('👐 GRAB END: ' + entity.id + ' by ' + (event.detail.hand ? event.detail.hand.id : 'unknown'));
-                            }
-                        });
-                    });
-
-                    // Listen for stretch events on all stretchable entities
-                    stretchableEntities.forEach(entity => {
-                        entity.addEventListener('stretch-start', function (event) {
-                            console.log('✋✋ SUPER-HANDS: stretch-start on', entity.id, event.detail);
-                            if (window.addDebugMessage) {
-                                window.addDebugMessage('✋✋ STRETCH START: ' + entity.id);
-                            }
-                        });
-
-                        entity.addEventListener('stretch-end', function (event) {
-                            console.log('👐👐 SUPER-HANDS: stretch-end on', entity.id, event.detail);
-                            if (window.addDebugMessage) {
-                                window.addDebugMessage('👐👐 STRETCH END: ' + entity.id);
-                            }
-                        });
-                    });
-
-                    console.log('🔧 Super-hands debug listeners set up for', grabbableEntities.length, 'grabbable and', stretchableEntities.length, 'stretchable entities');
-                    if (window.addDebugMessage) {
-                        window.addDebugMessage('🔧 Super-hands debug ready (via super-integration)');
-                    }
-                }
-            });
-
-
-
-            // Debug component for ray intersection
-            AFRAME.registerComponent('ray-debug', {
-                init: function () {
-                    // Listen for raycaster intersection events on this ray
-                    this.el.addEventListener('raycaster-intersection', (event) => {
-                        console.log('🎯 Ray intersection detected:', event.detail);
-                        if (window.addDebugMessage) {
-                            window.addDebugMessage('🎯 Ray intersection detected');
-                        }
-                    });
-
-                    this.el.addEventListener('raycaster-intersection-cleared', (event) => {
-                        console.log('🎯 Ray intersection cleared:', event.detail);
-                    });
-
-                    // Monitor raycaster component directly
-                    this.raycaster = this.el.components.raycaster;
-                    if (this.raycaster) {
-                        console.log('✅ Ray debug component found raycaster on:', this.el.id);
-                        if (window.addDebugMessage) {
-                            window.addDebugMessage('✅ Ray debug found raycaster on ' + this.el.id);
-                        }
-                    } else {
-                        console.log('❌ Ray debug component could not find raycaster on:', this.el.id);
-                        if (window.addDebugMessage) {
-                            window.addDebugMessage('❌ No raycaster found on ' + this.el.id, 'warn');
-                        }
-                    }
-                },
-
-                tick: function () {
-                    if (this.raycaster && this.raycaster.intersectedEls && this.raycaster.intersectedEls.length > 0) {
-                        // Only log once per intersection to avoid spam
-                        if (!this.lastIntersection || this.lastIntersection !== this.raycaster.intersectedEls[0].id) {
-                            this.lastIntersection = this.raycaster.intersectedEls[0].id;
-                            console.log('🔍 ' + this.el.id + ' intersecting:', this.lastIntersection);
-                            if (window.addDebugMessage) {
-                                window.addDebugMessage('🔍 ' + this.el.id + ' → ' + this.lastIntersection);
-                            }
-                        }
-                    } else {
-                        if (this.lastIntersection) {
-                            this.lastIntersection = null;
-                        }
-                    }
-                }
             });
         </script>
 
@@ -403,13 +44,14 @@
         <a-scene
             environment=" preset:default;ground: flat; groundTexture: none; lighting: distant; shadow: false; fog: 0.1"
             renderer="antialias: true" loading-screen="enabled: false" vr-mode-ui="enterVRButton: #enter-vr-button"
-            webxr="optionalFeatures: hand-tracking,local-floor; overlayElement:#dom-overlay;" show-hand-pose
-            hand-quality-monitor ar-cursor super-integration="rightRay: #rightRay; leftRay: #leftRay; debug: true">
+            webxr="optionalFeatures: hand-tracking,local-floor; overlayElement:#dom-overlay;" ar-cursor
+            super-integration="rightRay: #rightRay; leftRay: #leftRay; debug: true">
 
             <a-assets timeout="10000">
 
                 <!-- Models -->
                 <a-asset-item id="sword" src="assets/models/sword/scene.gltf" preload="true"></a-asset-item>
+                <a-asset-item id="sword_glb" src="assets/models/sword_glb/scene.glb" preload="true"></a-asset-item>
                 <a-asset-item id="chaos_orb" src="assets/models/chaos_orb/scene.gltf" preload="true"></a-asset-item>
                 <a-asset-item id="magical_orb" src="assets/models/magical_orb/scene.gltf" preload="true"></a-asset-item>
                 <a-asset-item id="time_chamber" src="assets/models/time_chamber/scene.gltf"
@@ -463,7 +105,7 @@
             </a-plane>
 
             <!-- Aurora Sky -->
-            <a-entity position="0 35.000 0" geometry="primitive: box; width: 67.5; height: 67.5; depth: 67.5;" material="shader: aurora-shader; 
+            <a-entity position="0 35.000 0" geometry="primitive: sphere; radius: 54.200;" material="shader: aurora-shader; 
                                 transparent: false; 
                                 side: back;
                                 iTime: 0;
@@ -475,150 +117,7 @@
             <a-entity id="time_chamber" gltf-model="#time_chamber" position="0 0.00 45" visible="true"
                 rotation="0 -150 0" scale="0.2 0.2 0.2"></a-entity>
 
-            <!-- Main Pose Display -->
-            <a-entity id="handPoseDisplay" geometry="primitive: plane; width: 1.2; height: 1.2"
-                material="color: #000022; opacity: 0.9; transparent: true; side: double" position="0 1.8 -3"
-                troika-text="value: Initializing...; 
-                           color: #00ff88; 
-                           fontSize: 0.06; 
-                           align: center; 
-                           baseline: center;
-                           maxWidth: 1.1;
-                           depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Left Hand Pose Display -->
-            <a-entity id="leftHandPoseDisplay" geometry="primitive: plane; width: 1.0; height: 0.5"
-                material="color: #002200; opacity: 0.9; transparent: true; side: double" position="-1.5 1.8 -3.5"
-                troika-text="value: 👈 Left Hand\n\nWaiting for pose...; 
-                           color: #00ff88; 
-                           fontSize: 0.05; 
-                           align: center; 
-                           baseline: center;
-                           maxWidth: 0.9;
-                           depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Right Hand Pose Display -->
-            <a-entity id="rightHandPoseDisplay" geometry="primitive: plane; width: 1.0; height: 0.5"
-                material="color: #220000; opacity: 0.9; transparent: true; side: double" position="1.5 1.8 -3.5"
-                troika-text="value: 👉 Right Hand\n\nWaiting for pose...; 
-                           color: #00ff88; 
-                           fontSize: 0.05; 
-                           align: center; 
-                           baseline: center;
-                           maxWidth: 0.9;
-                           depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Debug Log Displays (Below main displays) -->
-            <!-- Left Hand Debug Log -->
-            <a-entity id="leftDebugLog" geometry="primitive: plane; width: 1.0; height: 0.8"
-                material="color: #001100; opacity: 0.9; transparent: true; side: double" position="-1.8 0.8 0"
-                troika-text="value: 📝 LEFT HAND DEBUG LOG:\n\nInitializing...; 
-                           color: #88ff88; 
-                           fontSize: 0.04; 
-                           align: left; 
-                           baseline: center;
-                           maxWidth: 0.95;
-                           depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Right Hand Debug Log -->
-            <a-entity id="rightDebugLog" geometry="primitive: plane; width: 1.0; height: 0.8"
-                material="color: #110000; opacity: 0.9; transparent: true; side: double" position="1.8 0.8 0"
-                troika-text="value: 📝 RIGHT HAND DEBUG LOG:\n\nInitializing...; 
-                           color: #ff8888; 
-                           fontSize: 0.04; 
-                           align: left; 
-                           baseline: center;
-                           maxWidth: 0.95;
-                           depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Main Debug Console Log -->
-            <a-entity id="mainDebugLog" geometry="primitive: plane; width: 1.2; height: 0.8"
-                material="color: #001122; opacity: 0.9; transparent: true; side: double" position="0 0.8 -1.8"
-                troika-text="value: 📊 LIVE DEBUG CONSOLE:\n\nInitializing...; 
-                           color: #88ddff; 
-                           fontSize: 0.04; 
-                           align: left; 
-                           baseline: center;
-                           maxWidth: 1.15;
-                           depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Sword -->
-
-
-            <!-- Quest 3 Specific Help Panel -->
-            <a-entity id="quest-help-panel" geometry="primitive: plane; width: 1.8; height: 1.2"
-                material="color: #001122; opacity: 0.9; transparent: true; side: double" position="-1.8 1.8 -3"
-                rotation="0 15 -3" troika-text="value: 📱 QUEST 3 HAND TRACKING TIPS:\n\n🔍 VULCAN FALSE POSITIVE:\n• Fully relax ALL fingers\n• Don't curl pinky/ring finger\n• Keep hand centered in view\n\n✋ FLAT PALM DETECTION:\n• Spread fingers wide & even\n• Keep palm facing cameras\n• Avoid hand shadows\n• Don't tilt hand too much\n\n📏 OPTIMAL DISTANCE:\n• 30-60cm from headset\n• Both hands in camera view\n• Good lighting on hands;
-                    color: #00ff88;
-                    fontSize: 0.045;
-                    align: center;
-                    baseline: center;
-                    maxWidth: 1.7;
-                    depthOffset: -0.4;" look-at='[camera]'>
-            </a-entity>
-
-            <!-- Pinch Status Indicators (dynamic, like the main debug panel) -->
-            <a-entity id="pinch-status-text" geometry="primitive: plane; width: 2.2; height: 1.4"
-                material="color: #001122; opacity: 0.92; transparent: true; side: double" position="1.8 1.8 -3"
-                troika-text="value: 🙌 SUPER-HANDS TESTING 🙌\n\n🎯 POSE: Current gesture + confidence\n📊 QUALITY: Track confidence levels\n🔍 DEBUG: Live interaction logs\n\n✨ AVAILABLE INTERACTIONS:\n🔴 GRAB: Sphere - Single hand pinch\n🟣 STRETCH: Plane - Single hand test\n🟡 CLICK: Cylinder - Quick pinch\n🟦 HOVER: All objects\n\n⚠️ SINGLE-HAND STRETCH TEST:\n• Point at purple plane (see indicators)\n• Pinch once → stretch-start\n• Release → stretch-end;
-                    color: #00ff88;
-                    fontSize: 0.045;
-                    align: center;
-                    baseline: center;
-                    maxWidth: 2.1;
-                    depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Grab Mechanics Help Panel -->
-            <a-entity id="grab-help-panel" geometry="primitive: plane; width: 2.4; height: 1.0"
-                material="color: #112200; opacity: 0.9; transparent: true; side: double" position="0 2.2 -3"
-                troika-text="value: 🔗 SIMPLIFIED STRETCH TEST 🔗\n\n🔴 SPHERE (GRAB):\n🤏 Step 1: Point → GREEN GLOW\n🖱️ Step 2: Pinch → grab-start\n🏃 Step 3: Sphere follows hand\n\n🟣 PLANE (STRETCH TEST):\n✋ Step 1: Point at plane → hand indicator\n🤏 Step 2: Pinch → stretch-start\n🔄 Step 3: Test super-hands stretchable\n\n🚨 Debug Chain:\n• Look for hand intersection indicators\n• MOUSEDOWN → stretch-start events;
-                    color: #88ff44;
-                    fontSize: 0.04;
-                    align: center;
-                    baseline: center;
-                    maxWidth: 2.3;
-                    depthOffset: -0.4;" look-at="[camera]">
-            </a-entity>
-
-            <!-- Interactive Test Cube -->
-            <a-box id="interactive-test-cube" class="hoverable clickable" position="0 1.5 -1.8" width="0.5" height="0.5"
-                depth="0.5" color="#4ecdc4" material="transparent: true; opacity: 0.8"
-                animation__mouseenter="property: scale; to: 1.2 1.2 1.2; startEvents: mouseenter; dur: 300"
-                animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 300"
-                event-set__click="event: click; target: #click-counter; set: value: Clicks: 1;"
-                animation__click="property: rotation; to: 0 360 0; startEvents: click; dur: 1000" clickable hoverable>
-
-                <!-- Hover indicator -->
-                <a-sphere radius="0.05" position="0 0.4 0" color="#ff6b6b" visible="false"
-                    animation__hover-show="property: visible; to: true; startEvents: mouseenter"
-                    animation__hover-hide="property: visible; to: false; startEvents: mouseleave">
-                </a-sphere>
-
-                <!-- Label -->
-                <a-text value="🎯 Test Cube\nHover, Click & GRAB Me!\n✊ Pinch + Hold to Grab" position="0 0.8 0"
-                    align="center" color="#ffffff" scale="0.6 0.6 0.6" look-at="[camera]">
-                </a-text>
-
-                <!-- Grab indicator wireframe -->
-                <a-entity geometry="primitive: box; width: 0.52; height: 0.52; depth: 0.52"
-                    material="wireframe: true; color: #00ff00; opacity: 0.3; transparent: true"
-                    animation="property: rotation; to: 0 360 0; dur: 8000; loop: true">
-                </a-entity>
-
-                <!-- Click counter -->
-                <a-text id="click-counter" value="Clicks: 0" position="0 -0.4 0" align="center" color="#00ff88"
-                    scale="0.4 0.4 0.4" look-at="[camera]">
-                </a-text>
-            </a-box>
-
-            <!-- Another test object - Sphere (Super-Hands + Manual Events) -->
+            <!-- Test object - Sphere (Super-Hands + Manual Events) -->
             <a-sphere id="interactive-test-sphere" class="hoverable grabbable" position="2 1.5 -1.8" radius="0.3"
                 color="#ff6b6b" material="transparent: true; opacity: 0.8" hoverable grabbable
                 event-set__hover-visual="event: hover-start; material.color: #00ff00; material.emissive: #002200"
@@ -646,30 +145,7 @@
                 </a-sphere>
             </a-sphere>
 
-            <!-- Third test object - Cylinder -->
-            <a-cylinder id="interactive-test-cylinder" class="hoverable clickable" position="-2 1.5 -1.8" radius="0.2"
-                height="0.6" color="#feca57" material="transparent: true; opacity: 0.8"
-                animation__mouseenter="property: rotation; to: 0 180 0; startEvents: mouseenter; dur: 500"
-                animation__mouseleave="property: rotation; to: 0 0 0; startEvents: mouseleave; dur: 500"
-                animation__click="property: position; to: -2 2.5 -3; startEvents: click; dur: 800; direction: alternate"
-                clickable hoverable>
-
-                <!-- Label -->
-                <a-text value="🟡 Cylinder\nGrab & Drag Me!\n✊ Pinch + Hold" position="0 0.6 0" align="center"
-                    color="#ffffff" scale="0.5 0.5 0.5" look-at="[camera]">
-                </a-text>
-
-                <!-- Grab indicator spirals -->
-                <a-torus radius="0.25" radius-tubular="0.01" material="color: #00ff00; opacity: 0.5; transparent: true"
-                    animation="property: rotation; to: 360 0 0; dur: 4000; loop: true">
-                </a-torus>
-                <a-torus radius="0.25" radius-tubular="0.01" position="0 0.3 0"
-                    material="color: #00ff00; opacity: 0.3; transparent: true"
-                    animation="property: rotation; to: -360 0 0; dur: 4000; loop: true">
-                </a-torus>
-            </a-cylinder>
-
-            <!-- Fourth test object - Stretchable Plane -->
+            <!-- Test object - Stretchable Plane -->
             <a-plane id="interactive-test-plane" class="hoverable stretchable" position="2 1.5 0" width="1"
                 rotation="0 -90 0" height="1" color="#9b59b6" material="transparent: true; opacity: 0.8" hoverable
                 stretchable
@@ -718,9 +194,17 @@
                 html="html: #vr-form-interface; cursor: #cursor">
             </a-entity>
 
-            <a-entity id="sword" gltf-model="#sword" position="0 1.2 -15" visible="true" scale="0.1 0.1 0.1"
-                geometry="primitive: box; width: 1; height: 5; depth: 1" material="visible: false" hoverable
-                grabbable></a-entity>
+            <a-entity id="sword" data-pick-up class="magnet-left magnet-right" gltf-model="#sword_glb"
+                position="0 1.5 -0.6" scale="0.1 0.1 0.1"
+                animation__restore_position="startEvents:putdown;pauseEvents:pickup;property:position;to:0 1.5 -0.6;easing:easeOutBack;"
+                animation__restore_rotation="startEvents:putdown;pauseEvents:pickup;property:rotation;to:-30 180 0;easing:easeOutBack;">
+            </a-entity>
+
+
+            <!-- <a-entity>
+                <a-entity id="sword" gltf-model="#sword" visible="true" position="-3.186 -6.176 0.557"
+                    geometry="primitive: box; width: 1; height: 5; depth: 1" material="visible: false"></a-entity>
+            </a-entity> -->
 
             <a-entity id="player" position="0 0.5 0" movement-controls="acceleration: 50; easing: 40"
                 wasd-controls="acceleration: 50; easing: 40">
@@ -753,48 +237,33 @@
                             material="color:gold;metalness:1;roughness:0;"></a-torus>
                     </a-entity>
 
-                    <!-- <a-entity data-right="index-finger-tip" mixin="blink"
-                        blink-controls="rotateOnTeleport:false;startEvents:pose_point_fuseShort;endEvents:pose_point_fuseLong;"></a-entity>
-                    <a-entity data-left="index-finger-tip" mixin="blink"
-                        blink-controls="rotateOnTeleport:false;startEvents:pose_point_fuseShort;endEvents:pose_point_fuseLong;"></a-entity> -->
-
                     <!-- Ray and Grip are Available on Hands or Tracked Inputs -->
                     <a-entity id="rightRay" data-right="ray" mixin="blink" cursor=""
                         raycaster="objects:[html], .clickable, .hoverable, .grabbable;far:5;showLine:true;lineColor:red;"
                         super-hands="colliderEvent:raycaster-intersected;
                                    colliderEventProperty:els;
                                    colliderEndEvent:raycaster-intersected-cleared;
-                                   colliderEndEventProperty:clearedEls;" ray-debug>
-                        <a-entity position="0 0 -0.22" visible="true" class="pose-label"
-                            text="value: Right Hand; align: center; color: red;"></a-entity>
+                                   colliderEndEventProperty:clearedEls;">
                     </a-entity>
                     <a-entity id="leftRay" data-left="ray" mixin="blink" cursor=""
                         raycaster="objects:[html], .clickable, .hoverable, .grabbable;far:5;showLine:true;lineColor:blue;"
                         super-hands="colliderEvent:raycaster-intersected;
                                    colliderEventProperty:els;
                                    colliderEndEvent:raycaster-intersected-cleared;
-                                   colliderEndEventProperty:clearedEls;" ray-debug>
-                        <a-entity position="0 0 -0.22" visible="true" class="pose-label"
-                            text="value: Left Hand; align: center; color: blue;"></a-entity>
+                                   colliderEndEventProperty:clearedEls;">
                     </a-entity>
+                    <!-- These get drawn towards grabable objects, moving the whole hand and the attached elements-->
+                    <a-entity id="left-magnet" data-left="grip" data-magnet="magnet-left"
+                        grab-magnet-target="startEvents:squeezestart,pose_fist;stopEvents:pose_flat_fuseShort,squeezeend;noMagnetEl:#left-no-magnet;"></a-entity>
+                    <a-entity id="right-magnet" data-right="grip" data-magnet="magnet-right"
+                        grab-magnet-target="startEvents:squeezestart,pose_fist;stopEvents:pose_flat_fuseShort,squeezeend;noMagnetEl:#right-no-magnet;"></a-entity>
 
-                    <!-- These act like anchors pulling both hands and controllers towards grabable objects, moving the whole hand and the attached elements-->
-                    <a-entity id="right-magnet" data-right="grip"
-                        data-magnet=".magnet-right:not([data-no-magnet]),.magnet:not([data-no-magnet])"
-                        grab-magnet-target="startEvents:squeezestart,pose_fist;stopEvents:pose_flat_fuseShort,squeezeend;"></a-entity>
-                    <a-entity id="left-magnet" data-left="grip"
-                        data-magnet=".magnet-left:not([data-no-magnet]),.magnet:not([data-no-magnet])"
-                        grab-magnet-target="startEvents:squeezestart,pose_fist;stopEvents:pose_flat_fuseShort,squeezeend;"></a-entity>
 
                     <a-entity id="left-no-magnet" data-left="grip" data-no-magnet>
                         <a-entity html="html:#my-interface;cursor:#cursor" position="-0.142 -0.0166 -0.02928"
                             rotation="-80 90 0" scale="0.7 0.7 0.7"></a-entity>
                     </a-entity>
 
-                    <!-- Markers to let us know the real location of the hands -->
-                    <a-sphere id="right-no-magnet" data-right="grip" data-no-magnet radius="0.01"
-                        color="red"></a-sphere>
-                    <a-sphere id="left-no-magnet" data-left="grip" data-no-magnet radius="0.01" color="red"></a-sphere>
 
                     <!-- Invisible objects at the tips of each finger for physics or intersections -->
                     <a-sphere data-right="index-finger-tip" radius="0.01" visible="false"></a-sphere>
@@ -992,11 +461,22 @@
                             box-sizing: border-box;
                         ">
                     </div>
+                    <div>
+                        <label
+                            style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">Password:</label>
+                        <input type="password" placeholder="Enter your password" style="
+                            width: 100%; 
+                            padding: 8px 12px; 
+                            border: 2px solid #4285f4; 
+                            font-size: 14px;
+                            box-sizing: border-box;
+                        ">
+                    </div>
 
                     <div>
                         <label
                             style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">Email:</label>
-                        <input type="email" placeholder="your.email@example.com" style="
+                        <input type="text" placeholder="your.email@example.com" style="
                             width: 100%; 
                             padding: 8px 12px; 
                             border: 2px solid #4285f4; 
@@ -1041,20 +521,6 @@
                         </div>
                     </div>
 
-                    <div>
-                        <label
-                            style="display: block; color: #333; font-weight: bold; margin-bottom: 4px;">Comments:</label>
-                        <textarea placeholder="Share your VR thoughts..." style="
-                            width: 100%; 
-                            height: 80px;
-                            padding: 8px 12px; 
-                            border: 2px solid #4285f4; 
-                            font-size: 14px;
-                            box-sizing: border-box;
-                            resize: vertical;
-                            font-family: Arial, sans-serif;
-                        "></textarea>
-                    </div>
 
                     <div style="display: flex; gap: 12px;">
                         <button type="submit" style="
@@ -1092,7 +558,7 @@
             </h1>
             <div class="overlay-footer">
                 <section
-                    style="display: inline-block; background: lavenderblush; color: #333333; border-radius: 1em; padding: 1em; margin:0; accent-color: hotpink;"
+                    style="display: inline-block; color: #333333; border-radius: 1em; padding: 1em; margin:0; accent-color: hotpink;"
                     id="my-interface">
                     <h2>Settings</h2>
                     <fieldset style="border:none;">
